@@ -7,7 +7,7 @@ TABLESIZE = 7
 
 def setup_logging():
     FORMAT = '%(filename)s: %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=FORMAT)
+    logging.basicConfig(level=logging.DEBUG, format=FORMAT, filename='log.log')
     logging.info('Logging started')
 
 class Deck:
@@ -123,7 +123,7 @@ class Table:
             player.status = 'w'
             if len(player.hand) == 0:
                 # they won!
-                logging.warn('%s won!', player.name)
+                logging.info('%s won!', player.name)
                 self.winners.append(player)
         active_players = self.active_players()
         if len(active_players) <= 1:
@@ -151,7 +151,7 @@ class Table:
                 self.turn += 1
                 self.turn %= len(active_players)
                 active_players[self.turn].status = 'p'
-                logging.warn('skipping %s', active_players[self.turn].name)
+                logging.info('skipping %s', active_players[self.turn].name)
             # it's next players turn
             self.turn += 1
             self.turn %= len(active_players)

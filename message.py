@@ -69,6 +69,7 @@ def is_valid(msg):
     return re.match(gen_msg_regex, msg)
 
 def msg_type(msg):
+    assert(msg)
     return msg[1:6]
 
 def fields(msg):

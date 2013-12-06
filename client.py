@@ -6,7 +6,8 @@ import socket
 import getopt
 import sys
 import time
-from multiprocessing.pool import ThreadPool
+import threading
+import queue
 
 def current_turn_num(player_stat_list):
     assert(player_stat_list)
@@ -19,34 +20,50 @@ def current_turn_num(player_stat_list):
         return -1
 
 class Client():
-    def __init__(self, name, auto=True):
-        self.name = name
-        self.sockobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.buff = ''
-        self.msgs = []
-        self.player = None
-        self.in_game = False
+    def __init__(self, name, host, port, auto=True):
         self.automated = auto
-        self.prev_player_stat_list = None
-        self.player_num = None
         if self.automated:
             self.gui = None
         else:
-            self.gui = clientgui.ClientGui()
+            self.gui = clientgui.ClientGui(self)
+        self.name = name
+        self.sockobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.connect(host, port)
+        self.buff = ''
+        self.msgs = []
+        self.run = True
+        self.waiting_for_play = False
+        self.player = None
+        self.in_game = False
+        self.prev_player_stat_list = None
+        self.player_num = None
+        self.wait_thread = None
         logging.info('Client %s created', name)
 
     def connect(self, host, port):
         self.sockobj.connect((host, port))
         logging.info('Client %s succesfully connected to host: %s, port: %s',
             self.name, host, port)
+        if self.gui: self.gui.print_msg("Succesfully connected to server, waiting for join confirmation.")
 
     def send_msg(self, msg):
+        assert(msg)
         logging.info('Client %s sending msg: %s', self.name, msg)
         msg = msg.encode('ascii')
-        self.sockobj.send(msg)
+        try:
+            self.sockobj.send(msg)
+        except IOError as e:
+            logging.info('IOError when trying to send: , %s', e)
+            # server kicked us?
+            self.run = False
 
     def recv_msgs(self):
-        buff = self.sockobj.recv(1024)
+        try:
+            buff = self.sockobj.recv(1024)
+        except ConnectionResetError as e:
+            logging.info('ConnectionResetError when trying to receive: %s', e)
+            self.run = False
+            return
         buff = buff.decode('ascii')
         self.buff += buff
 
@@ -65,11 +82,13 @@ class Client():
             return None
 
     def game_loop(self):
-        # worker_pool = Pool(processes=5)
-        while True:
+        while self.run:
+            if self.wait_thread:
+                self.wait_thread.join(0)
+                if not self.wait_thread.is_alive():
+                    self.wait_thread = None
             if not self.msgs:
                 self.recv_msgs()
-            # worker_pool.map_async(self.process_msg, self.msgs)
             msg = self.get_msg()
             while msg:
                 self.process_msg(msg)
@@ -121,13 +140,17 @@ class Client():
                 self.player_num == current_turn_num(self.prev_player_stat_list)):
                 # this player just went
                 if self.automated:
-                    logging.warn("Automated player %s made an invalid play", self.name)
+                    logging.info("Automated player %s made an invalid play", self.name)
                 else:
                     self.gui.print_msg("You made an invalid play you schmuck.")
             hand = message.msg_to_hand(msg)
+            assert(hand)
             self.player.pickup_hand(hand)
             logging.info('Client %s succesfully picked up hand: ' + str(hand),
                 self.name)
+            if self.gui:
+                self.gui.print_hand(hand)
+                self.gui.print_msg("Picked up hand")
             self.in_game = True
         elif msg_type == 'stabl':
             self.process_stabl(msg)
@@ -139,6 +162,33 @@ class Client():
         else:
             logging.info('Client received msg: ' + msg)
 
+    def asynch_get_play(self):
+        self.wait_thread = threading.Thread(target=self.get_play)
+        self.wait_thread.start()
+    
+    def get_play(self):
+        assert(self.gui)
+        while self.waiting_for_play:
+            try:
+                play = self.gui.pending_play.get(timeout=5)
+            except queue.Empty:
+                continue
+            else:
+                if self.waiting_for_play:
+                    # still waiting, play it
+                    self.waiting_for_play = False
+                    self.player.remove_from_hand(play)
+                    self.send_msg('[cplay|{}]'.format(
+                        message.cards_to_str(play, 4)))
+                    if self.gui:
+                        self.gui.print_msg("Sent play")
+                        self.gui.print_hand(self.player.hand)
+                    return
+                else:
+                    break
+        self.gui.print_msg("Play didn't go through")
+        return
+                    
     def process_stabl(self, msg):
         logging.info('Client %s processing stabl: ' + msg, self.name)
         psl = message.stabl_to_player_stat_list(msg)
@@ -170,15 +220,24 @@ class Client():
             return
 
         if self.in_game:
+            # see if they missed their turn
+            if self.waiting_for_play and \
+                current_turn_num(psl) != self.my_turn_num(psl):
+                # their turn timed out
+                self.waiting_for_play = False
+                if not self.wait_thread.is_alive():
+                    self.wait_thread = None
             # see if it's their turn
             if current_turn_num(psl) == self.my_turn_num(psl):
                 if self.automated:
                     time.sleep(.2)
                     play = self.auto_play(last_play)
+                    self.player.remove_from_hand(play)
+                    self.send_msg('[cplay|{}]'.format(message.cards_to_str(play, 4)))
                 else:
-                    play = self.gui.prompt_for_play(psl, self.player.hand)
-                self.player.remove_from_hand(play)
-                self.send_msg('[cplay|{}]'.format(message.cards_to_str(play, 4)))
+                    self.waiting_for_play = True
+                    self.gui.print_msg("It's your turn!")
+                    self.asynch_get_play()
 
         self.prev_player_stat_list = psl
 
@@ -197,8 +256,10 @@ class Client():
             return []
 
     def disconnect(self):
+        self.sockobj.shutdown(socket.SHUT_RDWR)
         self.sockobj.close()
         logging.info('Client %s succesfully closed', self.name)
+        if self.gui: self.gui.print_msg("Disconnected from server")
 
 def usage():
     print(__doc__)
@@ -216,7 +277,7 @@ def parse_cmd_args(argv):
             elif opt in ('-s', '--host'):
                 common.HOST = arg
             elif opt in ('-p', '--port'):
-                common.PORT = arg
+                common.PORT = int(arg)
             elif opt in ('-m', '--manual'):
                 manual = True
             elif opt in ('-n', '--name'):
@@ -235,15 +296,15 @@ def main(argv):
     manual, name = parse_cmd_args(argv)
     auto = not manual
 
-    client = Client(name, auto=auto)
-    client.connect(common.HOST, common.PORT)
+    client = Client(name, common.HOST, common.PORT, auto=auto)
 
     # join the server
-    client.send_msg('[cjoin|{}]'.format(name))
+    client.send_msg('[cjoin|{}]'.format(name.ljust(8)))
     while not client.msgs:
         client.recv_msgs()
 
     msg = client.get_msg()
+    assert msg, 'No msg, self.msgs = '.format(client.msgs)
     while message.msg_type(msg) != 'sjoin':
         # logging.warn('Client {} received an unexpected message: {}'.format(client.name, msg))
         msg = client.get_msg()
@@ -252,16 +313,26 @@ def main(argv):
     name = message.fields(msg)[0].strip()
     client.player = common.Player(name)
     logging.info('Client {} successfully joined with name {}'.format(client.name, name))
+    if client.gui:
+        client.gui.print_msg("Succesfully joined server with name {}".format(
+            client.player.name))
 
     client.game_loop()
 
+    if client.gui: client.gui.print_msg("Quitting..")
+
     client.disconnect()
+
+    if client.gui:
+        client.gui.curses_thread.join()
+    logging.info("Client quitting")
+    return
 
 
 if __name__ == '__main__':
-    # common.setup_logging()
+    common.setup_logging()
     main(sys.argv[1:])
-    # logging.info('Logging finished')
+    logging.info('Logging finished')
     
 #    client = Client('localhost', 36789, 'chipjack')
 #    names = [

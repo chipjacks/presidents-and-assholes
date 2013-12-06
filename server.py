@@ -57,7 +57,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         self.msgs = []
         for msg in msgs:
             if not message.is_valid(msg):
-                logging.warn('Message flagged invalid: %s', msg)
+                logging.info('Message flagged invalid: %s', msg)
                 self.send_strike('30')
                 # need to add other strike codes
                 return
@@ -98,7 +98,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         try:
             table.play_cards(self.player, cards)
         except common.PlayerError as ex:
-            logging.warn(ex)
+            logging.info(ex)
             self.send_strike(ex.strike_code)
             self.send_shand()
         else:
@@ -124,8 +124,6 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             self.handle_close()
 
     def handle_close(self):
-        server.handle_client_disconnect(self._uid)
-        player_to_client.pop(self.player, None)
         if self.player in table.players:
             self.player.status = 'd'
             logging.info('Player {} left the table'.format(self.player.name))
@@ -139,9 +137,9 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 self.player.name))
             table.winners.remove(self.player)
         elif self.player:
-            logging.warn('Player {} can\'t be found'.format(self.player.name))
-        if len(table.active_players()) <= 1:
-            server.finish_game()
+            logging.info('Player {} can\'t be found'.format(self.player.name))
+        server.handle_client_disconnect(self._uid)
+        player_to_client.pop(self.player, None)
         self.close()
 
 class GameServer(asyncore.dispatcher):
@@ -181,6 +179,7 @@ class GameServer(asyncore.dispatcher):
         client = self.clients.pop(uid, None)
         try:
             self.clients_at_table.remove(uid)
+            table.remove_player(client.player)
         except ValueError:
             pass
         client_to_player.pop(client, None)
@@ -218,7 +217,7 @@ class GameServer(asyncore.dispatcher):
                 who = player
                 break
         else:
-            logging.warn('Play timed out, but no player active.')
+            logging.info('Play timed out, but no player active.')
             return
         client = player_to_client[who]
         # pass for him
@@ -228,7 +227,7 @@ class GameServer(asyncore.dispatcher):
 
     def finish_game(self):
         global lobby
-        logging.warn('Game ended, new game starting')
+        logging.info('Game ended, new game starting')
         # send one last stabl
         self.send_stabl()
         table.starting_round = False
@@ -296,10 +295,10 @@ def wait_for_players():
 def main_loop():
     turntimeout = time.time() + 15
     while asyncore.socket_map:
-        if len(table.players) <= 0:
+        if len(table.players) < 2:
             # games over, everyone bailed
             logging.info('Game ended because too many people bailed')
-            server.finish_game()
+            return
         # wait for players to play
         turntimeleft = turntimeout - time.time()
         asyncore.loop(timeout=turntimeleft, count = 1)
@@ -347,20 +346,21 @@ def parse_cmd_args(argv):
         return turntimeout, lobbytimeout, minplayers
 
 def start_game():
-    while not table.ready():
-        wait_for_players()
-        logging.info('Table not ready, players: {}'.format(repr(table.players)))
+    while True:
+        while not table.ready():
+            wait_for_players()
+            logging.info('Table not ready, players: {}'.format(repr(table.players)))
 
-    logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
-    
-    # deal the cards
-    server.send_hands()
+        logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
+        
+        # deal the cards
+        server.send_hands()
 
-    # send the initial stabl
-    server.send_stabl()
+        # send the initial stabl
+        server.send_stabl()
 
-    # start the game
-    main_loop()
+        # start the game
+        main_loop()
 
 def main(argv):
     turntimeout, lobbytimeout, minplayers = parse_cmd_args(argv)
