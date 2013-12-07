@@ -15,10 +15,11 @@ LOBBY_WIDTH = 15
 HAND_HEIGHT = 8
 LOBBY_HEIGHT = HAND_HEIGHT + HAND_HEIGHT
 HAND_WIDTH = SCRN_WIDTH - LOBBY_WIDTH
-PLAY_WIDTH = SCRN_WIDTH // 2
+PLAY_WIDTH = SCRN_WIDTH // 3
 CHAT_WIDTH = SCRN_WIDTH - PLAY_WIDTH
+SEND_CHAT_WIDTH = SCRN_WIDTH // 2
 PLAY_INPUT_WIDTH = SCRN_WIDTH // 4
-BEAT_WIDTH = SCRN_WIDTH - CHAT_WIDTH - PLAY_INPUT_WIDTH
+BEAT_WIDTH = SCRN_WIDTH - SEND_CHAT_WIDTH - PLAY_INPUT_WIDTH
 PLAY_CHAT_HEIGHT = 10
 INPUT_HEIGHT = 5
 SCRN_HEIGHT = MSGS_HEIGHT + TABLE_HEIGHT + HAND_HEIGHT + \
@@ -42,6 +43,7 @@ class ClientGui():
         self.client = client
         self.prev_last_play = []
         self.msgs = []
+        self.chat_msgs = []
         self.play_history = []
         self.hand = []
         self.play = []
@@ -76,7 +78,10 @@ class ClientGui():
                 self.chat_box_win.clear()
                 self.chat_box_win.refresh()
                 text = text.replace('\n', '').replace('\r', '')
+                text = text[:63]
                 curses.curs_set(0) # make cursor invisible again
+                assert(len(text) <= 63)
+                self.client.send_msg('[cchat|{}]'.format(text.ljust(63)))
                 self.print_msg('Sent chat message: {}'.format(text))
             elif c.upper() == 'Q':
                 # Q for quit
@@ -134,6 +139,24 @@ class ClientGui():
         self.hand_win.refresh()
         self.lock.release()
 
+    def update_chat(self, who, msg):
+        self.lock.acquire()
+        full_msg = "{}: {}".format(who.strip(), msg.strip())
+        if (len(full_msg) > CHAT_WIDTH - 4):
+            self.chat_msgs.append(full_msg[:CHAT_WIDTH-4])
+            self.chat_msgs.append("    " + full_msg[CHAT_WIDTH-4:])
+        else:
+            self.chat_msgs.append("{}: {}".format(who.strip(), msg.strip()))
+        i = PLAY_CHAT_HEIGHT - 2
+        for msg in reversed(self.chat_msgs):
+            self.chat_win.addstr(i, 2, msg[:CHAT_WIDTH-4].ljust(CHAT_WIDTH-4))
+            i -= 1
+            if i == 1:
+                break
+        self.chat_win.refresh()
+        self.lock.release()
+        
+
     def build_windows(self, stdscr):
         self.lock.acquire()
         stdscr.clear()
@@ -160,10 +183,10 @@ class ClientGui():
         self.beat_win = curses.newwin(INPUT_HEIGHT, BEAT_WIDTH,
             MSGS_HEIGHT + TABLE_HEIGHT + HAND_HEIGHT + PLAY_CHAT_HEIGHT, 
             PLAY_INPUT_WIDTH)
-        self.chat_input_win = curses.newwin(INPUT_HEIGHT, CHAT_WIDTH,
+        self.chat_input_win = curses.newwin(INPUT_HEIGHT, SEND_CHAT_WIDTH,
             MSGS_HEIGHT + TABLE_HEIGHT + HAND_HEIGHT + PLAY_CHAT_HEIGHT,
             PLAY_INPUT_WIDTH + BEAT_WIDTH)
-        self.chat_box_win = curses.newwin(INPUT_HEIGHT - 3, CHAT_WIDTH - 4,
+        self.chat_box_win = curses.newwin(INPUT_HEIGHT - 3, SEND_CHAT_WIDTH - 4,
             MSGS_HEIGHT + TABLE_HEIGHT + HAND_HEIGHT + PLAY_CHAT_HEIGHT + 2,
             PLAY_INPUT_WIDTH + BEAT_WIDTH + 2)
         self.chat_box = curses.textpad.Textbox(self.chat_box_win,

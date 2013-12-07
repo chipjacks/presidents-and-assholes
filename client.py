@@ -171,6 +171,11 @@ class Client():
             logging.info('Lobby update: {}'.format(repr(lobby)))
             if self.gui:
                 self.gui.update_lobby(message.slobb_to_lobby(msg))
+        elif msg_type == 'schat':
+            fields = message.fields(msg)
+            who = fields[0]
+            what = fields[1]
+            self.gui.update_chat(who, what)
         else:
             logging.info('Client received msg: ' + msg)
 
