@@ -66,6 +66,8 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 self.handle_cjoin(msg)
             elif msg_type == 'cplay':
                 self.handle_cplay(msg)
+            elif msg_type == 'cchat':
+                self.handle_cchat(msg)
 
     def handle_cjoin(self, msg):
         fields = message.fields(msg)
@@ -110,6 +112,18 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 server.finish_game()
         finally:
             server.send_stabl()
+
+    def handle_cchat(self, msg):
+        assert(message.msg_type(msg) == 'cchat')
+        fields = message.fields(msg)
+        assert(len(fields) == 1)
+        chat = fields[0].strip()
+        if not self.player:
+            # client hasn't sent cjoin
+            self.send_strike('30')
+            return
+        name = self.player.name
+        server.send_schat(name, chat)
 
     def send_shand(self):
         msg = message.hand_to_msg(self.player.hand)
@@ -194,6 +208,13 @@ class GameServer(asyncore.dispatcher):
         if not lobby:
             return
         msg = message.lobby_to_slobb(lobby)
+        logging.info('Server broadcasting: ' + msg)
+        for client in self.clients.values():
+            client.add_to_buffer(msg)
+
+    def send_schat(self, name, chat):
+        assert(len(chat) <= 63)
+        msg = '[schat|{}|{}]'.format(name.ljust(8), chat.ljust(63))
         logging.info('Server broadcasting: ' + msg)
         for client in self.clients.values():
             client.add_to_buffer(msg)
