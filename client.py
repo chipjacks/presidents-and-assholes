@@ -28,6 +28,7 @@ class Client():
             self.gui = clientgui.ClientGui(self)
         self.name = name
         self.sockobj = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.sockobj.settimeout(1)
         self.connect(host, port)
         self.buff = ''
         self.msgs = []
@@ -50,12 +51,21 @@ class Client():
         assert(msg)
         logging.info('Client %s sending msg: %s', self.name, msg)
         msg = msg.encode('ascii')
-        try:
-            self.sockobj.send(msg)
-        except IOError as e:
-            logging.info('IOError when trying to send: , %s', e)
-            # server kicked us?
-            self.run = False
+        try_num = 1
+        while try_num <= 3:
+            try:
+                self.sockobj.send(msg)
+            except IOError as e:
+                logging.info('IOError when trying to send: , %s', e)
+                # server kicked us?
+                self.run = False
+            except socket.timeout as e:
+                # try again
+                logging.info('Timeout when trying to send')
+                try_num += 1
+                continue
+            else:
+                break
 
     def recv_msgs(self):
         try:
@@ -63,6 +73,8 @@ class Client():
         except ConnectionResetError as e:
             logging.info('ConnectionResetError when trying to receive: %s', e)
             self.run = False
+            return
+        except socket.timeout as e:
             return
         buff = buff.decode('ascii')
         self.buff += buff
@@ -201,7 +213,7 @@ class Client():
             active_players = []
             for player in psl:
                 if player.status in ('a', 'w', 'p') and player.num_cards > 0:
-                        active_players.append(player)
+                    active_players.append(player)
             assert(len(active_players) != 0)
             if len(active_players) == 1:
                 # the game is over!

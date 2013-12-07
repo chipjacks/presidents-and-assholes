@@ -248,10 +248,7 @@ def test_game(host, num_bots=6):
     for thread in client_threads:
         thread.start()
 
-    for thread in client_threads:
-        thread.join()
     my_client_thread.join()
-    server_thread.join()
 
 if __name__ == '__main__':
     common.setup_logging()

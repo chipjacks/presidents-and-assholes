@@ -70,9 +70,13 @@ class ClientGui():
             # self.print_msg('Got key {}'.format(ord(c)))
             if c.upper() == 'T':
                 # T for Talk/Chat
-                self.chat_input_win.move(2,2)
+                curses.curs_set(1) # make cursor visible
+                self.chat_box_win.move(0,0)
                 text = self.chat_box.edit(self.chat_validator)
+                self.chat_box_win.clear()
+                self.chat_box_win.refresh()
                 text = text.replace('\n', '').replace('\r', '')
+                curses.curs_set(0) # make cursor invisible again
                 self.print_msg('Sent chat message: {}'.format(text))
             elif c.upper() == 'Q':
                 # Q for quit
@@ -86,14 +90,11 @@ class ClientGui():
                     self.print_msg(msg)
             elif ord(c) == curses.ascii.NL:
                 # Enter key pressed
-                if self.play:
-                    self.pending_play.put(self.play)
-                    self.print_msg('Played {}'.format(
-                        self.print_cards(self.play)))
-                    self.play = []
-                    self.update_play()
-                else:
-                    self.print_msg('Nothing to play')
+                self.pending_play.put(self.play)
+                self.print_msg('Played {}'.format(
+                    self.print_cards(self.play)))
+                self.play = []
+                self.update_play()
             if c not in self.card_index:
                 continue
             i = self.card_index.index(c)
@@ -107,6 +108,12 @@ class ClientGui():
                 self.update_play()
             else:
                 self.print_msg("Invalid card index")
+        
+        # cleanup
+        curses.curs_set(1)
+        curses.endwin()
+        subprocess.call("reset", shell=True)
+
 
     def update_play(self):
         self.lock.acquire()
@@ -132,6 +139,7 @@ class ClientGui():
         stdscr.clear()
         title = "WARLORDS AND SCUMBAGS"
         top_right = "H - HELP, Q - QUIT"
+        curses.curs_set(0)  # make cursor invisible
         stdscr.addstr(0, 1, title.ljust(SCRN_WIDTH - len(top_right) - 2) +
             top_right)
         stdscr.refresh()
@@ -216,6 +224,12 @@ class ClientGui():
 
     def print_hand(self, hand):
         self.lock.acquire()
+        if not hand:
+            self.hand_win.addstr(3, 2, ' '.ljust(HAND_WIDTH - 3))
+            self.hand_win.addstr(5, 2, ' '.ljust(HAND_WIDTH - 3))
+            self.hand_win.refresh()
+            self.lock.release()
+            return
         hand.sort()
         self.hand = hand
         if not hand:
@@ -229,6 +243,7 @@ class ClientGui():
         self.lock.release()
 
     def prompt_for_play(self, player_stat_list, hand, msg=None):
+        # deprecated
         if msg:
             self.print_msg(msg)
             # print(msg)
@@ -290,10 +305,11 @@ class ClientGui():
         self.update_players(psl)
         self.update_play_to_beat(last_play)
 
+        whose_turn = client.current_turn_num(psl)
         if ppsl:
             if last_play == []:
                 # they won the round
-                self.update_plays('Someone', 'won the round')
+                self.update_plays(psl[whose_turn].name, 'won the round')
                 #pass
             elif last_play != self.prev_last_play:
                 # someone played some cards, and someone may have been skipped
