@@ -53,108 +53,6 @@ class ClientGui():
         self.curses_thread = threading.Thread(target=self.curses_wrapper)
         self.curses_thread.start()
     
-    def curses_wrapper(self):
-        curses.wrapper(self.curses_loop)
-
-    def chat_validator(self, key):
-        if key == curses.ascii.NL: # newline/return key pressed
-            return curses.ascii.BEL
-        elif key == curses.ascii.DEL: # delete pressed
-            return curses.KEY_BACKSPACE
-        else:
-            self.print_msg('Detected {}'.format(key))
-            return key
-
-    def curses_loop(self, stdscr):
-        self.build_windows(stdscr)
-        while 1:
-            c = self.play_win.getkey()
-            # self.print_msg('Got key {}'.format(ord(c)))
-            if c.upper() == 'T':
-                # T for Talk/Chat
-                curses.curs_set(1) # make cursor visible
-                self.chat_box_win.move(0,0)
-                text = self.chat_box.edit(self.chat_validator)
-                self.chat_box_win.clear()
-                self.chat_box_win.refresh()
-                text = text.replace('\n', '').replace('\r', '')
-                text = text[:63]
-                curses.curs_set(0) # make cursor invisible again
-                assert(len(text) <= 63)
-                self.client.send_msg('[cchat|{}]'.format(text.ljust(63)))
-                self.print_msg('Sent chat message: {}'.format(text))
-            elif c.upper() == 'Q':
-                # Q for quit
-                self.client.run = False
-                break
-            elif c.upper() == 'H':
-                # H for help
-                help_msgs = [HELP_MSG[i:i+SCRN_WIDTH-5] for i in range(0,
-                    len(HELP_MSG), SCRN_WIDTH-5)]
-                for msg in help_msgs:
-                    self.print_msg(msg)
-            elif ord(c) == curses.ascii.NL:
-                # Enter key pressed
-                self.pending_play.put(self.play)
-                self.print_msg('Played {}'.format(
-                    self.print_cards(self.play)))
-                self.play = []
-                self.update_play()
-            if c not in self.card_index:
-                continue
-            i = self.card_index.index(c)
-            if i < len(self.hand):
-                # take or put back card from hand
-                if self.hand[i] in self.play:
-                    # remove card from play
-                    self.play.remove(self.hand[i])
-                else:
-                    self.play.append(self.hand[i])
-                self.update_play()
-            else:
-                self.print_msg("Invalid card index")
-        
-        # cleanup
-        curses.curs_set(1)
-        curses.endwin()
-        subprocess.call("reset", shell=True)
-
-
-    def update_play(self):
-        self.lock.acquire()
-        self.play_input_win.addstr(3, 2, 
-            self.print_cards(self.play).ljust(PLAY_INPUT_WIDTH - 3))
-        self.play_input_win.refresh()
-
-        hand_indexes = [self.hand.index(c) for c in self.play]
-        play_str = ''
-        for i in range(len(self.hand)):
-            if i in hand_indexes:
-                play_str += ('^    ')
-            else:
-                play_str += ('     ')
-
-        self.hand_win.addstr(6, 2, play_str.ljust(HAND_WIDTH-3))
-        self.hand_win.refresh()
-        self.lock.release()
-
-    def update_chat(self, who, msg):
-        self.lock.acquire()
-        full_msg = "{}: {}".format(who.strip(), msg.strip())
-        if (len(full_msg) > CHAT_WIDTH - 4):
-            self.chat_msgs.append(full_msg[:CHAT_WIDTH-4])
-            self.chat_msgs.append("    " + full_msg[CHAT_WIDTH-4:])
-        else:
-            self.chat_msgs.append("{}: {}".format(who.strip(), msg.strip()))
-        i = PLAY_CHAT_HEIGHT - 2
-        for msg in reversed(self.chat_msgs):
-            self.chat_win.addstr(i, 2, msg[:CHAT_WIDTH-4].ljust(CHAT_WIDTH-4))
-            i -= 1
-            if i == 1:
-                break
-        self.chat_win.refresh()
-        self.lock.release()
-
     def build_windows(self, stdscr):
         self.lock.acquire()
         stdscr.clear()
@@ -211,110 +109,71 @@ class ClientGui():
             win.refresh()
         self.lock.release()
 
-    def print_msg(self, msg):
-        self.lock.acquire()
-        self.msgs.append(msg)
-        i = MSGS_HEIGHT - 3
-        for msg in reversed(self.msgs):
-            self.msgs_win.addstr(i, 2, msg[:SCRN_WIDTH-4].ljust(SCRN_WIDTH-4))
-            i -= 1
-            if i == 1:
+    def curses_wrapper(self):
+        curses.wrapper(self.curses_loop)
+
+    def curses_loop(self, stdscr):
+        self.build_windows(stdscr)
+        while self.client.run:
+            c = self.play_win.getkey()
+            # self.print_msg('Got key {}'.format(ord(c)))
+            if c.upper() == 'T':
+                # T for Talk/Chat
+                curses.curs_set(1) # make cursor visible
+                self.chat_box_win.move(0,0)
+                text = self.chat_box.edit(self.chat_validator)
+                self.chat_box_win.clear()
+                self.chat_box_win.refresh()
+                text = text.replace('\n', '').replace('\r', '')
+                text = text[:63]
+                curses.curs_set(0) # make cursor invisible again
+                assert(len(text) <= 63)
+                self.client.send_msg('[cchat|{}]'.format(text.ljust(63)))
+                self.print_msg('Sent chat message: {}'.format(text))
+            elif c.upper() == 'Q':
+                # Q for quit
+                self.client.run = False
                 break
-        self.msgs_win.refresh()
-        self.lock.release()
+            elif c.upper() == 'H':
+                # H for help
+                help_msgs = [HELP_MSG[i:i+SCRN_WIDTH-5] for i in range(0,
+                    len(HELP_MSG), SCRN_WIDTH-5)]
+                for msg in help_msgs:
+                    self.print_msg(msg)
+            elif ord(c) == curses.ascii.NL:
+                # Enter key pressed
+                self.pending_play.put(self.play)
+                self.print_msg('Played {}'.format(
+                    self.print_cards(self.play)))
+                self.play = []
+                self.update_play()
+            if c not in self.card_index:
+                continue
+            i = self.card_index.index(c)
+            if i < len(self.hand):
+                # take or put back card from hand
+                if self.hand[i] in self.play:
+                    # remove card from play
+                    self.play.remove(self.hand[i])
+                else:
+                    self.play.append(self.hand[i])
+                self.update_play()
+            else:
+                self.print_msg("Invalid card index")
+        
+        # cleanup before returning shell to user
+        curses.curs_set(1)
+        curses.endwin()
+        subprocess.call("reset", shell=True)
 
-    def print_card(self, card):
-        assert(card >= 0 and card < 52)
-        suites = [
-            '\u2663',   # clubs
-            '\u2666',   # diamonds
-            '\u2665',   # hearts
-            '\u2660',   # spades
-        ]
-        values = ['3','4','5','6','7','8','9','10','J','Q','K','A','2']
-
-        suite = suites[card % 4]
-        value = values[card // 4]
-
-        return value + suite
-
-    def print_cards(self, cards):
-        if not cards:
-            return ''
-        return '   '.join([self.print_card(card) for card in cards])
-
-    def print_hand(self, hand):
-        self.lock.acquire()
-        if not hand:
-            self.hand_win.addstr(3, 2, ' '.ljust(HAND_WIDTH - 3))
-            self.hand_win.addstr(5, 2, ' '.ljust(HAND_WIDTH - 3))
-            self.hand_win.refresh()
-            self.lock.release()
-            return
-        hand.sort()
-        self.hand = hand
-        if not hand:
-            return
-        # self.hand_win.addstr(1, 2, 'HAND')
-        self.hand_win.addstr(3, 2, 
-            '    '.join([self.card_index[x] for x in range(0,len(hand))]).ljust(
-                HAND_WIDTH-3))
-        self.hand_win.addstr(5, 2, self.print_cards(hand).ljust(HAND_WIDTH-3))
-        self.hand_win.refresh()
-        self.lock.release()
-
-    def prompt_for_play(self, player_stat_list, hand, msg=None):
-        # deprecated
-        if msg:
-            self.print_msg(msg)
-            # print(msg)
-
-        # for i, ps in enumerate(player_stat_list):
-        #    print(('Player {i}: {name}, cards remaining: {num_cards}, status: ' +
-        #            '{status}').format(i=i, name=ps.name,
-        #                num_cards=ps.num_cards, status=ps.status))
-
-        hand = list(hand)
-        hand.sort()
-        self.print_msg("It's your turn!")
-        # print("It's your turn.\n Your hand: {}".format(self.print_hand(hand)))
-        # print("What would you like to play? (use index into card list)")
-        play = None 
-        if not play:
-            return ''
-        play = [int(x) for x in play.split(',')]
-        play = [hand[x-1] for x in play]
-        return(play)
-
-    def update_players(self, player_stat_list):
-        self.lock.acquire()
-        psl = player_stat_list
-        for i, p in enumerate(psl):
-            self.table_win.addstr(i+3, 2, '{}{}{}{}'.format(p.name.ljust(12), 
-                str(p.num_cards).ljust(14), p.status.ljust(10), str(p.strikes)))
-        self.table_win.refresh()
-        self.lock.release()
-
-    def update_plays(self, name, play, cards=None):
-        if cards:
-            self.play_history.append('{} {} {}'.format(name, play,
-                self.print_cards(cards)).ljust(PLAY_WIDTH-3))
+    def chat_validator(self, key):
+        if key == curses.ascii.NL: # newline/return key pressed
+            return curses.ascii.BEL
+        elif key == curses.ascii.DEL: # delete pressed
+            return curses.KEY_BACKSPACE
         else:
-            self.play_history.append('{} {}'.format(name, play).ljust(
-                PLAY_WIDTH-3))
-        i = PLAY_CHAT_HEIGHT - 2
-        for play in reversed(self.play_history):
-            self.play_win.addstr(i, 2, play)
-            i -= 1
-            if i == 1:
-                break
-        self.play_win.refresh()
-
-    def update_play_to_beat(self, play):
-        self.lock.acquire()
-        self.beat_win.addstr(3, 2, self.print_cards(play).ljust(BEAT_WIDTH - 3))
-        self.beat_win.refresh()
-        self.lock.release()
+            # self.print_msg('Detected {}'.format(key))
+            return key
 
     def update(self, player_stat_list, prev_player_stat_list, last_play,
         winner=None, asshole=False):
@@ -375,6 +234,129 @@ class ClientGui():
         self.prev_last_play = last_play
         self.lock.release()
         return False
+
+    def update_play(self):
+        self.lock.acquire()
+        self.play_input_win.addstr(3, 2, 
+            self.print_cards(self.play).ljust(PLAY_INPUT_WIDTH - 3))
+        self.play_input_win.refresh()
+
+        hand_indexes = [self.hand.index(c) for c in self.play]
+        play_str = ''
+        for i in range(len(self.hand)):
+            if i in hand_indexes:
+                play_str += ('^    ')
+            else:
+                play_str += ('     ')
+
+        self.hand_win.addstr(6, 2, play_str.ljust(HAND_WIDTH-3))
+        self.hand_win.refresh()
+        self.lock.release()
+
+    def update_chat(self, who, msg):
+        self.lock.acquire()
+        full_msg = "{}: {}".format(who.strip(), msg.strip())
+        if (len(full_msg) > CHAT_WIDTH - 4):
+            self.chat_msgs.append(full_msg[:CHAT_WIDTH-4])
+            self.chat_msgs.append("    " + full_msg[CHAT_WIDTH-4:])
+        else:
+            self.chat_msgs.append("{}: {}".format(who.strip(), msg.strip()))
+        i = PLAY_CHAT_HEIGHT - 2
+        for msg in reversed(self.chat_msgs):
+            self.chat_win.addstr(i, 2, msg[:CHAT_WIDTH-4].ljust(CHAT_WIDTH-4))
+            i -= 1
+            if i == 1:
+                break
+        self.chat_win.refresh()
+        self.lock.release()
+
+    def print_msg(self, msg):
+        self.lock.acquire()
+        self.msgs.append(msg)
+        i = MSGS_HEIGHT - 3
+        for msg in reversed(self.msgs):
+            self.msgs_win.addstr(i, 2, msg[:SCRN_WIDTH-4].ljust(SCRN_WIDTH-4))
+            i -= 1
+            if i == 1:
+                break
+        self.msgs_win.refresh()
+        self.lock.release()
+
+    def print_card(self, card):
+        assert(card >= 0 and card < 52)
+        suites = [
+            '\u2663',   # clubs
+            '\u2666',   # diamonds
+            '\u2665',   # hearts
+            '\u2660',   # spades
+        ]
+        values = ['3','4','5','6','7','8','9','10','J','Q','K','A','2']
+
+        suite = suites[card % 4]
+        value = values[card // 4]
+
+        return value + suite
+
+    def print_cards(self, cards):
+        if not cards:
+            return ''
+        return '   '.join([self.print_card(card) for card in cards])
+
+    def print_hand(self, hand):
+        self.lock.acquire()
+        if not hand:
+            self.hand_win.addstr(3, 2, ' '.ljust(HAND_WIDTH - 3))
+            self.hand_win.addstr(5, 2, ' '.ljust(HAND_WIDTH - 3))
+            self.hand_win.refresh()
+            self.lock.release()
+            return
+        hand.sort()
+        self.hand = hand
+        if not hand:
+            return
+        hand_indexes = ''
+        for i, card in enumerate(hand):
+            if card // 4 == 7:
+                # it's a 10, we need more space after it for extra digit
+                hand_indexes += self.card_index[i]
+                hand_indexes += '     ' 
+            else:
+                hand_indexes += self.card_index[i]
+                hand_indexes += '    '
+        self.hand_win.addstr(3, 2, hand_indexes.ljust(HAND_WIDTH-3))
+        self.hand_win.addstr(5, 2, self.print_cards(hand).ljust(HAND_WIDTH-3))
+        self.hand_win.refresh()
+        self.lock.release()
+
+    def update_players(self, player_stat_list):
+        self.lock.acquire()
+        psl = player_stat_list
+        for i, p in enumerate(psl):
+            self.table_win.addstr(i+3, 2, '{}{}{}{}'.format(p.name.ljust(12), 
+                str(p.num_cards).ljust(14), p.status.ljust(10), str(p.strikes)))
+        self.table_win.refresh()
+        self.lock.release()
+
+    def update_plays(self, name, play, cards=None):
+        if cards:
+            self.play_history.append('{} {} {}'.format(name, play,
+                self.print_cards(cards)).ljust(PLAY_WIDTH-3))
+        else:
+            self.play_history.append('{} {}'.format(name, play).ljust(
+                PLAY_WIDTH-3))
+        i = PLAY_CHAT_HEIGHT - 2
+        for play in reversed(self.play_history):
+            self.play_win.addstr(i, 2, play)
+            i -= 1
+            if i == 1:
+                break
+        self.play_win.refresh()
+
+    def update_play_to_beat(self, play):
+        self.lock.acquire()
+        self.beat_win.addstr(3, 2, self.print_cards(play).ljust(BEAT_WIDTH - 3))
+        self.beat_win.refresh()
+        self.lock.release()
 
     def update_lobby(self, lobby):
         self.lock.acquire()

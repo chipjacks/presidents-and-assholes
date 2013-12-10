@@ -215,7 +215,7 @@ class TestClient():
 #         self.server.close()
 #         self.server_thread.join()
 
-def test_game(host, num_bots=6):
+def test_game(host, num_bots=6, gui=True):
     if not host:
         host = common.HOST
 
@@ -240,20 +240,47 @@ def test_game(host, num_bots=6):
         ]
     server_thread = threading.Thread(target=server.main, args=(['-s', host],))
     server_thread.start()
-    my_client_thread = threading.Thread(target=client.main,
-        args=(['-n', names[0], '-m'],))
-    my_client_thread.start()
+    if gui:
+        my_client_thread = threading.Thread(target=client.main,
+            args=(['-n', names[0], '-m'],))
+        my_client_thread.start()
     client_threads = [threading.Thread(target=client.main, args=(['-n', name],))
         for name in names[1:num_bots+1]]
     for thread in client_threads:
         thread.start()
 
-    my_client_thread.join()
+    if gui:
+        my_client_thread.join()
+    else:
+        TEST_DURATION = 2
+        print("Running {} sec automated game".format(TEST_DURATION))
+        for i in range(TEST_DURATION):
+            time.sleep(1)
+            print(i+1)
+        # cleanup
+        server.stop()
+        server_thread.join()
+        print("Shutdown server")
+        for thread in client_threads:
+            thread.join(timeout=1)
+        print("Shutdown clients")
+
 
 if __name__ == '__main__':
     common.setup_logging()
     # unittest.main()
     h = '192.168.10.100'
     lh = 'localhost'
-    test_game(lh, 15)
+    GUI = True 
+    if not GUI:
+        # speed test
+        print("Performing automated test to see if game crashes")
+        client.AUTOPLAY_PAUSE = 0
+        test_game(lh, 15, gui=GUI)
+    else:
+        print("Starting GUI to test user interaction")
+        time.sleep(.5)
+        # gui test
+        client.AUTOPLAY_PAUSE = .1
+        test_game(lh, 15, gui=GUI)
     logging.info('Logging finished')

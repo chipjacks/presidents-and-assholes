@@ -21,6 +21,7 @@ import sys
 MAX_CLIENTS = 20
 TURNTIMEOUT = 15
 LOBBYTIMEOUT = 15
+RUNNING = False
 
 table = common.Table()
 lobby = []
@@ -176,9 +177,11 @@ class GameServer(asyncore.dispatcher):
         self.swap_timeout = None
     
     def add_player_to_table(self, uid, player):
+        assert(len(table.players) == len(self.clients_at_table))
         player.status = 'w'
         table.add_player(player)
         self.clients_at_table.append(uid)
+        assert(len(table.players) == len(self.clients_at_table))
 
     def remove_player_from_table(self, uid, player):
         table.remove_player(player)
@@ -193,6 +196,16 @@ class GameServer(asyncore.dispatcher):
     def handle_close(self):
         logging.info('Closing GameServer')
         self.close()
+    
+    def shutdown(self):
+        self.handle_close()
+        while True:
+            try:
+                client = self.clients.popitem()
+                client[1].handle_close()
+            except KeyError:
+                return
+
 
     def handle_client_disconnect(self, uid):
         client = self.clients.pop(uid, None)
@@ -200,6 +213,8 @@ class GameServer(asyncore.dispatcher):
             self.clients_at_table.remove(uid)
             table.remove_player(client.player)
         except ValueError:
+            pass
+        except AttributeError:
             pass
         client_to_player.pop(client, None)
 
@@ -342,6 +357,7 @@ class GameServer(asyncore.dispatcher):
         # add players back onto table
         for player in table.winners:
             self.add_player_to_table(player_to_client[player]._uid, player)
+        table.winners = []
         # fill remaining slots with players from lobby
         while (len(table.players) < 7 and lobby):
             self.add_player_to_table(player_to_client[lobby[0]]._uid, lobby[0])
@@ -352,13 +368,11 @@ class GameServer(asyncore.dispatcher):
 
         start_game()
 
-
 def start_server():
     global server
+    global RUNNING
+    RUNNING = True
     server = GameServer(common.HOST, common.PORT)
-
-def process_requests():
-    asyncore.loop(timeout=0.1, count=1)
 
 def start_server_in_thread():
     server_thread = threading.Thread(target=main)
@@ -366,15 +380,17 @@ def start_server_in_thread():
     return server, server_thread
 
 def wait_for_players():
+    global RUNNING
     timeout = time.time() + LOBBYTIMEOUT
-    while asyncore.socket_map:
+    while asyncore.socket_map and RUNNING:
         asyncore.loop(timeout=0.5, count=1)
         if time.time() > timeout or table.full():
             break
 
 def main_loop():
+    global RUNNING
     turntimeout = time.time() + TURNTIMEOUT
-    while asyncore.socket_map:
+    while asyncore.socket_map and RUNNING:
         if len(table.players) < 2:
             # games over, everyone bailed
             logging.info('Game ended because too many people bailed')
@@ -393,6 +409,33 @@ def main_loop():
             else:
                 # they still have some time
                 pass
+
+def stop():
+    global RUNNING
+    RUNNING = False
+
+def start_game():
+    global RUNNING
+    while RUNNING:
+        while not table.ready():
+            wait_for_players()
+            logging.info('Table not ready, players: {}'.format(repr(table.players)))
+
+        logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
+        
+        # deal the cards
+        server.send_hands()
+
+        # send the initial stabl
+        server.send_stabl()
+
+        # start the game
+        main_loop()
+
+        # shutdown server
+        server.shutdown()
+
+# Main, command-line interaction
 
 def usage():
     print(__doc__)
@@ -425,23 +468,6 @@ def parse_cmd_args(argv):
     else:
         return turntimeout, lobbytimeout, minplayers
 
-def start_game():
-    while True:
-        while not table.ready():
-            wait_for_players()
-            logging.info('Table not ready, players: {}'.format(repr(table.players)))
-
-        logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
-        
-        # deal the cards
-        server.send_hands()
-
-        # send the initial stabl
-        server.send_stabl()
-
-        # start the game
-        main_loop()
-
 def main(argv):
     turntimeout, lobbytimeout, minplayers = parse_cmd_args(argv)
 
@@ -449,6 +475,8 @@ def main(argv):
     logging.info('Game server started')
 
     start_game()
+
+    logging.info('Game server shutdown')
 
 
 if __name__ == '__main__':

@@ -9,6 +9,8 @@ import time
 import threading
 import queue
 
+AUTOPLAY_PAUSE = 1
+
 def current_turn_num(player_stat_list):
     assert(player_stat_list)
     for i, player_stat in enumerate(player_stat_list):
@@ -22,6 +24,7 @@ def current_turn_num(player_stat_list):
 class Client():
     def __init__(self, name, host, port, auto=True):
         self.automated = auto
+        self.run = True
         if self.automated:
             self.gui = None
         else:
@@ -32,7 +35,6 @@ class Client():
         self.connect(host, port)
         self.buff = ''
         self.msgs = []
-        self.run = True
         self.waiting_for_play = False
         self.waiting_for_swap = False
         self.player = None
@@ -55,7 +57,9 @@ class Client():
         try_num = 1
         while try_num <= 3:
             try:
-                self.sockobj.send(msg)
+                sent = self.sockobj.send(msg)
+                if sent == 0:
+                    self.run = False
             except IOError as e:
                 logging.info('Client %s: IOError when trying to send: , %s',
                     self.name, e)
@@ -68,11 +72,16 @@ class Client():
                 try_num += 1
                 continue
             else:
+                # succesful send
                 break
 
     def recv_msgs(self):
         try:
             buff = self.sockobj.recv(1024)
+            if not buff:
+                # looks like socket is closed
+                self.run = False
+                return
         except ConnectionResetError as e:
             logging.info('ConnectionResetError when trying to receive: %s', e)
             self.run = False
@@ -337,7 +346,6 @@ class Client():
             # see if it's their turn
             if current_turn_num(psl) == self.my_turn_num(psl):
                 if self.automated:
-                    time.sleep(.2)
                     play = self.auto_play(last_play)
                     self.player.remove_from_hand(play)
                     self.send_msg('[cplay|{}]'.format(message.cards_to_str(play, 4)))
@@ -349,6 +357,7 @@ class Client():
         self.prev_player_stat_list = psl
 
     def auto_play(self, last_play):
+        time.sleep(AUTOPLAY_PAUSE)
         hand = self.player.hand
         hand.sort()
         if (len(last_play) == 0):
@@ -363,7 +372,10 @@ class Client():
             return []
 
     def disconnect(self):
-        self.sockobj.shutdown(socket.SHUT_RDWR)
+        try:
+            self.sockobj.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
         self.sockobj.close()
         logging.info('Client %s succesfully closed', self.name)
         if self.gui: self.gui.print_msg("Disconnected from server")
@@ -426,13 +438,13 @@ def main(argv):
 
     client.game_loop()
 
-    if client.gui: client.gui.print_msg("Quitting..")
+    if client.gui: client.gui.print_msg("Quitting, press any key to confirm")
 
     client.disconnect()
 
     if client.gui:
         client.gui.curses_thread.join()
-    logging.info("Client quitting")
+    logging.info("Client %s quitting", client.name)
     return
 
 
