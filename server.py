@@ -107,6 +107,19 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         cards = message.str_to_cards(fields[0])
         server.new_play = True
         try:
+            if server.first_play:
+                if table.starting_round and 0 not in cards:
+                    # they have to play the 3 of clubs on the first play
+                    self.send_strike('16')
+                    self.send_shand()
+                    return
+                elif not cards:
+                    # they can't pass on first play
+                    self.send_strike('18')
+                    return
+                else:
+                    table.validate_play(self.player, cards)
+                    server.first_play = False
             table.play_cards(self.player, cards)
         except common.PlayerError as ex:
             logging.info(ex)
@@ -180,6 +193,7 @@ class GameServer(asyncore.dispatcher):
         self.clients_at_table = []
         table.starting_round = True
         self.new_play = True
+        self.first_play = True
         self.swap_timeout = None
     
     def add_player_to_table(self, uid, player):
@@ -258,6 +272,9 @@ class GameServer(asyncore.dispatcher):
             # don't need to perform warlord-scumbag swap
             for player in table.players:
                 player_to_client[player].send_shand()
+                if 0 in player.hand:
+                    # they have the 3 of clubs
+                    player.status = 'a'
         else:
             logging.info("Initiating warlord-scumbag swap")
             for player in table.players[1:-1]:
@@ -301,8 +318,9 @@ class GameServer(asyncore.dispatcher):
             # send scumbag his hand
             msg = message.hand_to_msg(scumbag.hand)
             player_to_client[scumbag].send_shand()
-        # set the warlord's status to active
-        table.players[0].status = 'a'
+            # set the warlord's status to active
+            table.players[0].status = 'a'
+            self.first_play = True
                 
     def handle_cswap(self, client, msg):
         if not self.swap_timeout:

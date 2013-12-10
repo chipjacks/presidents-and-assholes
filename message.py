@@ -1,5 +1,4 @@
 import re
-import random
 import common
 
 smsg_types = ['slobb', 'stabl', 'sjoin', 'shand', 'strik', 'schat', 'swapw', 'swaps']

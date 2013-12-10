@@ -12,7 +12,7 @@ Features:
 - 4 Validate messages (Regular expressions)
 + 2 Implement chand
 + 2 Name mangling
-- 3 First hand starts with 3 of clubs
++ 3 First hand starts with 3 of clubs
 + 1 Start players in lobby instead of at table
 + 1 Lobby limit
 - Finish command line parameters
