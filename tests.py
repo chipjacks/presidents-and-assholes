@@ -172,6 +172,38 @@ class TestMessageHandling(unittest.TestCase):
         new_lobby = message.slobb_to_lobby(slobb)
         self.assertEqual([p.name for p in lobby], new_lobby)
 
+class TestNameMangling(unittest.TestCase):
+    names = [
+        'a',
+        'a1',
+        'a11',
+        'a111',
+        'herbert',
+        '_',
+        'herbert1'
+    ]
+
+    invalid_names = [
+        '9asdf',
+        '%asdfsad',
+        'sdf$asd'
+    ]
+
+    def setUp(self):
+        self.mangled_names = []
+        pass
+
+    def test_name_mangle(self):
+        mangle_multiplier = 100
+        for name in self.names + self.invalid_names:
+            for i in range(0, mangle_multiplier):
+                mangled_name = server.mangle_name(self.mangled_names,
+                    name)
+                self.mangled_names.append(mangled_name)
+        self.mangled_names = set(self.mangled_names)
+        self.assertEqual(len(self.mangled_names),
+            mangle_multiplier * (len(self.names) + len(self.invalid_names)))
+
 class TestClient():
     def __init__(self):
         HOST = 'localhost'
@@ -238,6 +270,7 @@ def test_game(host, num_bots=6, gui=True):
         'turdhead',
         'rufus   '
         ]
+    names = ['poop' for i in range(40)]
     server_thread = threading.Thread(target=server.main, args=(['-s', host],))
     server_thread.start()
     if gui:
@@ -271,12 +304,12 @@ if __name__ == '__main__':
     # unittest.main()
     h = '192.168.10.100'
     lh = 'localhost'
-    GUI = True 
+    GUI = False 
     if not GUI:
         # speed test
         print("Performing automated test to see if game crashes")
         client.AUTOPLAY_PAUSE = 0
-        test_game(lh, 15, gui=GUI)
+        test_game(lh, 30, gui=GUI)
     else:
         print("Starting GUI to test user interaction")
         time.sleep(.5)

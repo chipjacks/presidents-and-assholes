@@ -17,6 +17,8 @@ import time
 import queue
 import getopt
 import sys
+import re
+import random
 
 MAX_CLIENTS = 20
 TURNTIMEOUT = 15
@@ -73,6 +75,8 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 self.handle_cchat(msg)
             elif msg_type == 'cswap':
                 server.handle_cswap(self, msg)
+            elif msg_type == 'chand':
+                self.send_shand()
 
     def handle_cjoin(self, msg):
         fields = message.fields(msg)
@@ -82,18 +86,18 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             # we already initialized the player
             raise common.PlayerError(self.player, 'invalid cjoin')
         # check if name needs to be mangled
-        name = fields[0]
+        name = fields[0].strip()
+        current_names = [player.name for player in lobby]
+        current_names += [player.name for player in table.players]
+        name = mangle_name(current_names, name)
+
         # add the player to the table or the lobby
         self.player = common.Player(name)
         client_to_player[self] = self.player
         player_to_client[self.player] = self
-        if table.full():
-            logging.info('Player added to lobby: {}'.format(name))
-            lobby.append(self.player)
-            server.send_slobb()
-        else:
-            logging.info('Player added to table: {}'.format(name))
-            server.add_player_to_table(self._uid, self.player)
+        logging.info('Player added to lobby: {}'.format(name))
+        lobby.append(self.player)
+        server.send_slobb()
         # reply with sjoin
         self.add_to_buffer('[sjoin|{}]'.format(name))
 
@@ -131,6 +135,8 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         server.send_schat(name, chat)
 
     def send_shand(self):
+        if not self.player or not self.player.hand:
+            return
         msg = message.hand_to_msg(self.player.hand)
         self.add_to_buffer(msg)
 
@@ -179,8 +185,10 @@ class GameServer(asyncore.dispatcher):
     def add_player_to_table(self, uid, player):
         assert(len(table.players) == len(self.clients_at_table))
         player.status = 'w'
-        table.add_player(player)
-        self.clients_at_table.append(uid)
+        if table.add_player(player):
+            self.clients_at_table.append(uid)
+        else:
+            logging.info("tried to add played to table when already full")
         assert(len(table.players) == len(self.clients_at_table))
 
     def remove_player_from_table(self, uid, player):
@@ -189,6 +197,9 @@ class GameServer(asyncore.dispatcher):
 
     def handle_accepted(self, sock, addr):
         logging.debug('Incoming connection from %s' % repr(addr))
+        if len(lobby) >= common.LOBBYSIZE:
+            # lobby is full
+            return
         handler = PlayerHandler(self._next_uid, sock)
         self.clients[self._next_uid] = handler
         self._next_uid += 1
@@ -368,6 +379,36 @@ class GameServer(asyncore.dispatcher):
 
         start_game()
 
+def mangle_name(current_names, name):
+    name_regex = '^[a-zA-Z_]\w{0,7}$'
+    if not re.match(name_regex, name):
+        # name is invalid
+        if re.match('\d', name[0]):
+            # starts with a digit
+            name = 'a' + name[1:]
+        for i, c in enumerate(name):
+            if not re.match('\w', c):
+                name = name[:i] + 'a' + name[i+1:]
+    # name should be valid now
+    i, j = 0, 0
+    while name in current_names:
+        # mangle that beezy
+        if len(name) < 8:
+            # try adding a '1' to the end
+            name += '1'
+        elif i < 10:
+            # try replacing last character with a digit
+            name = name[:-1] + str(i)
+            i += 1
+        elif j < 10:
+            name = name[:-2] + str(j) + name[-1]
+            j += 1
+        else:
+            # give them a random number name
+            name = 'a' + str(random.randrange(0, 9999999))
+    return name
+
+
 def start_server():
     global server
     global RUNNING
@@ -384,7 +425,7 @@ def wait_for_players():
     timeout = time.time() + LOBBYTIMEOUT
     while asyncore.socket_map and RUNNING:
         asyncore.loop(timeout=0.5, count=1)
-        if time.time() > timeout or table.full():
+        if time.time() > timeout or len(lobby) >= 7:
             break
 
 def main_loop():
@@ -416,12 +457,19 @@ def stop():
 
 def start_game():
     global RUNNING
+    global lobby
+    minplayers = 3
     while RUNNING:
-        while not table.ready():
+        while not len(lobby) >= minplayers:
             wait_for_players()
-            logging.info('Table not ready, players: {}'.format(repr(table.players)))
+            logging.info('Table not ready, players: {}'.format(repr(lobby)))
 
-        logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
+        # move players from lobby to table
+        for player in lobby[:7]:
+            server.add_player_to_table(player_to_client[player]._uid, player)
+        lobby = lobby[7:]
+
+        logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
         
         # deal the cards
         server.send_hands()

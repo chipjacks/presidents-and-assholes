@@ -1,4 +1,5 @@
 import re
+import random
 import common
 
 smsg_types = ['slobb', 'stabl', 'sjoin', 'shand', 'strik', 'schat', 'swapw', 'swaps']
@@ -129,5 +130,4 @@ def stabl_to_last_play(msg):
     cardstr = msg[112:123]
     cards = str_to_cards(cardstr)
     return cards
-
 

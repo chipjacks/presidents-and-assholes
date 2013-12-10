@@ -4,6 +4,7 @@ import logging
 HOST = 'localhost'
 PORT = 36716
 TABLESIZE = 7
+LOBBYSIZE = 35
 
 def setup_logging():
     FORMAT = '%(filename)s: %(message)s'
