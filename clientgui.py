@@ -122,11 +122,10 @@ class ClientGui():
 
     def update_play(self):
         self.lock.acquire()
-        if not self.hand:
-            return
         self.play_input_win.addstr(3, 2, 
             self.print_cards(self.play).ljust(PLAY_INPUT_WIDTH - 3))
         self.play_input_win.refresh()
+
         hand_indexes = [self.hand.index(c) for c in self.play]
         play_str = ''
         for i in range(len(self.hand)):
@@ -135,7 +134,7 @@ class ClientGui():
             else:
                 play_str += ('     ')
 
-        self.hand_win.addstr(6, 2, play_str)
+        self.hand_win.addstr(6, 2, play_str.ljust(HAND_WIDTH-3))
         self.hand_win.refresh()
         self.lock.release()
 
@@ -155,7 +154,6 @@ class ClientGui():
                 break
         self.chat_win.refresh()
         self.lock.release()
-        
 
     def build_windows(self, stdscr):
         self.lock.acquire()

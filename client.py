@@ -34,6 +34,7 @@ class Client():
         self.msgs = []
         self.run = True
         self.waiting_for_play = False
+        self.waiting_for_swap = False
         self.player = None
         self.in_game = False
         self.prev_player_stat_list = None
@@ -56,9 +57,11 @@ class Client():
             try:
                 self.sockobj.send(msg)
             except IOError as e:
-                logging.info('IOError when trying to send: , %s', e)
+                logging.info('Client %s: IOError when trying to send: , %s',
+                    self.name, e)
                 # server kicked us?
                 self.run = False
+                break
             except socket.timeout as e:
                 # try again
                 logging.info('Timeout when trying to send')
@@ -95,13 +98,13 @@ class Client():
 
     def game_loop(self):
         while self.run:
-            if self.wait_thread:
-                self.wait_thread.join(0)
-                if not self.wait_thread.is_alive():
-                    self.wait_thread = None
+            # cleanup any zombie threads
+            self.cleanup_wait_thread()
+            # get msgs from socket
             if not self.msgs:
                 self.recv_msgs()
             msg = self.get_msg()
+            # process msgs
             while msg:
                 self.process_msg(msg)
                 msg = self.get_msg()
@@ -152,7 +155,8 @@ class Client():
                 self.player_num == current_turn_num(self.prev_player_stat_list)):
                 # this player just went
                 if self.automated:
-                    logging.info("Automated player %s made an invalid play", self.name)
+                    logging.info("Automated player %s made an invalid play",
+                        self.name)
                 else:
                     self.gui.print_msg("You made an invalid play you schmuck.")
             hand = message.msg_to_hand(msg)
@@ -176,16 +180,75 @@ class Client():
             who = fields[0]
             what = fields[1]
             self.gui.update_chat(who, what)
+        elif msg_type == 'swapw':
+            # notifies warlord of swap offer from scumbag
+            fields = message.fields(msg)
+            card = int(fields[0])
+            if self.gui:
+                # figure out what card the player wants to send the scumbag
+                self.gui.print_msg("Received card from scumbag: {}".format(
+                    self.gui.print_card(card)))
+                self.gui.print_msg(
+                    "Please play the card you would like to send to the scumbag")
+                self.waiting_for_swap = True
+                self.waiting_for_play = False
+                self.asynch_get_play()
+            else:
+                if not self.player.hand:
+                    logging.info("Warlord offered a swap before they knows there hand")
+                    # we need to wait for our hand, hopefully it is in the socket
+                    self.recv_msgs()
+                    # gonna have to come back to this msg later
+                    self.msgs.append(msg)
+                else:
+                    # automated, send lowest card
+                    self.send_msg('[cswap|{0:02d}]'.format(
+                        min(self.player.hand)))
+                    self.player.hand.remove(min(self.player.hand))
+        elif msg_type == 'swaps':
+            # notifies scumbag that a swap has occurred
+            fields = message.fields(msg)
+            card_gained = int(fields[0])
+            card_lost = int(fields[1])
+            if self.gui:
+                self.gui.print_msg(
+                    "As the scumbag, you were forced to trade your {} for the presidents {}".format(
+                    self.gui.print_card(card_lost),
+                    self.gui.print_card(card_gained)))
+        elif msg_type == 'strik':
+            fields = message.fields(msg)
+            code = fields[0]
+            if self.waiting_for_swap and code == 20:
+                # timeout on swap
+                logging.info('Client timed out on sending cswap')
+                if self.gui:
+                    self.gui.print_msg(
+                        "You ran out of time to send a card to the scumbag".format(
+                        code))
+                self.waiting_for_swap = False
+            else:
+                logging.info('Client %s received strike, code: %s', self.name, 
+                    code)
+                if self.gui:
+                    self.gui.print_msg(
+                        "Received strike (code {}) from server".format(code))
         else:
             logging.info('Client received msg: ' + msg)
 
     def asynch_get_play(self):
+        assert(self.gui)
+        if self.wait_thread:
+            self.wait_thread.join(0)
+            if self.wait_thread.is_alive():
+                logging.info("Client %s tried to start multiple threads waiting " +
+                    "for gui input")
+                return
         self.wait_thread = threading.Thread(target=self.get_play)
         self.wait_thread.start()
     
     def get_play(self):
         assert(self.gui)
-        while self.waiting_for_play:
+        while self.waiting_for_play or self.waiting_for_swap:
             try:
                 play = self.gui.pending_play.get(timeout=5)
             except queue.Empty:
@@ -201,11 +264,29 @@ class Client():
                         self.gui.print_msg("Sent play")
                         self.gui.print_hand(self.player.hand)
                     return
+                elif self.waiting_for_swap:
+                    # still waiting, swap it
+                    self.waiting_for_swap = False
+                    self.player.remove_from_hand(list(play[:1]))
+                    self.send_msg('[cswap|{}]'.format(
+                        message.cards_to_str(play[:1], 1)))
+                    if self.gui:
+                        self.gui.print_msg("Sent swap")
+                        self.gui.print_hand(self.player.hand)
+                    return
                 else:
-                    break
-        self.gui.print_msg("Play didn't go through")
+                    if self.gui:
+                        self.gui.print_msg("Wait for your turn to play")
         return
                     
+    def cleanup_wait_thread(self):
+        if not self.wait_thread:
+            return
+        else:
+            self.wait_thread.join(0)
+        if not self.wait_thread.is_alive():
+            self.wait_thread = None
+
     def process_stabl(self, msg):
         logging.info('Client %s processing stabl: ' + msg, self.name)
         psl = message.stabl_to_player_stat_list(msg)
@@ -213,7 +294,17 @@ class Client():
 
         winner = self.detect_winner(psl, self.prev_player_stat_list)
         asshole = False
+
+        # update gui
+        if self.gui:
+            self.gui.update(psl, self.prev_player_stat_list,
+                last_play, winner, asshole)
+
         if winner:
+            if winner.name.strip() == self.player.name.strip():
+                # they went out
+                if self.gui:
+                    self.gui.print_msg("You went out!")
             # see if the game is over
             active_players = []
             for player in psl:
@@ -223,16 +314,15 @@ class Client():
             if len(active_players) == 1:
                 # the game is over!
                 self.in_game = False
+                self.waiting_for_play = False
                 self.player.hand = []
                 self.player.status = 'l'
                 self.player_num = None
+                self.cleanup_wait_thread()
+                self.wait_thread = None
                 asshole = active_players[0]
                 self.prev_player_stat_list = None
 
-        # update gui
-        if self.gui:
-            self.gui.update(psl, self.prev_player_stat_list,
-                last_play, winner, asshole)
         if asshole:
             return
 
