@@ -2,6 +2,7 @@
 *.txt
 *.log
 *.swp
+__pycache__
 
 # C extensions
 *.so
@@ -37,3 +38,5 @@ nosetests.xml
 .mr.developer.cfg
 .project
 .pydevproject
+
+*.pyc

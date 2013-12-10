@@ -19,6 +19,8 @@ import getopt
 import sys
 
 MAX_CLIENTS = 20
+TURNTIMEOUT = 15
+LOBBYTIMEOUT = 15
 
 table = common.Table()
 lobby = []
@@ -68,6 +70,8 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 self.handle_cplay(msg)
             elif msg_type == 'cchat':
                 self.handle_cchat(msg)
+            elif msg_type == 'cswap':
+                server.handle_cswap(self, msg)
 
     def handle_cjoin(self, msg):
         fields = message.fields(msg)
@@ -169,6 +173,7 @@ class GameServer(asyncore.dispatcher):
         self.clients_at_table = []
         table.starting_round = True
         self.new_play = True
+        self.swap_timeout = None
     
     def add_player_to_table(self, uid, player):
         player.status = 'w'
@@ -223,12 +228,84 @@ class GameServer(asyncore.dispatcher):
         hands = table.deal()
         assert(len(table.players) == len(hands))
         assert(len(self.clients_at_table) == len(hands))
-        for player in table.players:
-            msg = message.hand_to_msg(player.hand)
-            player_to_client[player].add_to_buffer(msg)
-
-        # negotiate president, asshole swap
+        if table.starting_round:
+            # don't need to perform warlord-scumbag swap
+            for player in table.players:
+                player_to_client[player].send_shand()
+        else:
+            logging.info("Initiating warlord-scumbag swap")
+            for player in table.players[1:-1]:
+                player_to_client[player].send_shand()
+            # send warlord hand and swapw
+            warlord = table.players[0]
+            scumbag = table.players[-1]
+            card_from_scum = max(scumbag.hand)
+            warlord.hand.append(card_from_scum)
+            player_to_client[warlord].send_shand()
+            msg = '[swapw|{}]'.format(card_from_scum)
+            player_to_client[warlord].add_to_buffer(msg)
+            
+            # wait for response
+            logging.info("Offered warlord swap, waiting for response")
+            self.swap_timeout = time.time() + TURNTIMEOUT
+            while asyncore.socket_map:
+                asyncore.loop(timeout=0.5, count=1)
+                if not self.swap_timeout:
+                    # the warlord sent the cswap
+                    # remove the card from the scumbags hand
+                    scumbag.hand.remove(card_from_scum)
+                    # send the scumbag swaps
+                    msg = '[swaps|{}|{}]'.format(scumbag.hand[-1], card_from_scum)
+                    player_to_client[scumbag].add_to_buffer(msg)
+                    logging.info("Swap completed succesfully")
+                    break
+                elif time.time() > self.swap_timeout:
+                    logging.info("Warlord timed out in swap, giving original hand")
+                    # swap timed out
+                    # send warlord strike
+                    player_to_client[warlord].send_strike('20')
+                    # resend warlord his old hand
+                    warlord.hand.remove(card_from_scum)
+                    player_to_client[warlord].send_shand()
+                    # send swaps to scumbag
+                    player_to_client[scumbag].add_to_buffer('[swaps|52|52]')
+                    # reset the timeout
+                    self.swap_timeout = None
+                    break
+            # send scumbag his hand
+            msg = message.hand_to_msg(scumbag.hand)
+            player_to_client[scumbag].send_shand()
+        # set the warlord's status to active
         table.players[0].status = 'a'
+                
+    def handle_cswap(self, client, msg):
+        if not self.swap_timeout:
+            # we are not waiting for a swap, this is invalid
+            logging.info("Unexpected cswap message received")
+            client.send_strike('72')
+            return
+        else:
+            # check if client is warlord
+            if client != player_to_client[table.players[0]]:
+                # not the warlord
+                client.send_strike('71')
+                logging.info("Non-warlord client sent swapw")
+                return
+            # check that the warlord has the card
+            card = int(msg[7:9])
+            if card not in client.player.hand:
+                # doesn't have the card, let them try again
+                logging.info("Warlord tried to swap a card they don't have, " +
+                    "going to let them try again")
+                client.send_strike('70')
+                client.send_shand()
+                self.swap_timeout += TURNTIMEOUT
+                return
+            # passed all checks, move card into scumbags hand
+            client.player.hand.remove(card)
+            table.players[-1].hand.append(card)
+            self.swap_timeout = None
+            # send_hands will take care of the rest
 
     def play_timedout(self):
         who = None
@@ -253,45 +330,27 @@ class GameServer(asyncore.dispatcher):
         self.send_stabl()
         table.starting_round = False
         table.turn = 0
+        table.played_cards = []
         active_players = table.active_players()
         assert(len(active_players) <= 1)
         if active_players:
             # get the asshole off the table
             table.winners.append(active_players[0])
+        # reset the table
         table.players = []
         self.clients_at_table = []
-        old_players = []
-        new_players = []
-
-        # get people from the lobby
-        if len(lobby) > 7:
-            new_players = lobby[0:7]
-            lobby = lobby[7:]
-            lobby += table.winners
-        else:
-            new_players = lobby
-            lobby = []
-            num_old_players = common.TABLESIZE - len(new_players)
-            if len(table.winners) < num_old_players:
-                old_players = table.winners
-            else:
-                old_players = table.winners[0:num_old_players]
-                assert(len(old_players) == num_old_players)
-                # move rest of winners to lobby
-                lobby += table.winners[num_old_players:]
-        
-        table.winners = []
-        table.played_cards = []
-        for player in old_players:
+        # add players back onto table
+        for player in table.winners:
             self.add_player_to_table(player_to_client[player]._uid, player)
-        for player in new_players: 
-            self.add_player_to_table(player_to_client[player]._uid, player)
+        # fill remaining slots with players from lobby
+        while (len(table.players) < 7 and lobby):
+            self.add_player_to_table(player_to_client[lobby[0]]._uid, lobby[0])
+            lobby = lobby[1:]
 
         # send a lobby update message
         server.send_slobb()
 
         start_game()
-
 
 
 def start_server():
@@ -307,14 +366,14 @@ def start_server_in_thread():
     return server, server_thread
 
 def wait_for_players():
-    timeout = time.time() + 5  # 30 seconds from now
+    timeout = time.time() + LOBBYTIMEOUT
     while asyncore.socket_map:
         asyncore.loop(timeout=0.5, count=1)
         if time.time() > timeout or table.full():
             break
 
 def main_loop():
-    turntimeout = time.time() + 15
+    turntimeout = time.time() + TURNTIMEOUT
     while asyncore.socket_map:
         if len(table.players) < 2:
             # games over, everyone bailed
