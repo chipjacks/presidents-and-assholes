@@ -1,26 +1,28 @@
 presidents-and-assholes
 =======================
 
-Server, client, and client GUI to play the Presidents and Assholes card game over a network.
+Server, client, and curses text-based GUI to play the Presidents and
+Assholes (aka Warlords and Scumbags) card game over the network.
 
 Todo
 ---
 
 Features:
-- 6 Out of turn play handling in GUI
-- 5 Make server crash proof
-- 4 Validate messages (Regular expressions)
-+ 2 Implement chand
-+ 2 Name mangling
-+ 3 First hand starts with 3 of clubs
-+ 1 Start players in lobby instead of at table
-+ 1 Lobby limit
+- 3 Out of turn play handling in GUI
+- 2 Make server crash proof
+- x Validate messages (Regular expressions)
++ x Implement chand
++ x Name mangling
++ x First hand starts with 3 of clubs
++ x Start players in lobby instead of at table
++ x Lobby limit
 - Finish command line parameters
 
 Bugs:
 - Server crashing when unitialized clients disconnect
-+ Email to prevent having to wait for os to free socket
-+ server 230: len(hands) != len(players_at_table)
++ x Email to prevent having to wait for os to free socket
++ x server 230: len(hands) != len(players_at_table)
+- Check on swapping no cards
 
 Other:
 - Cleanup code

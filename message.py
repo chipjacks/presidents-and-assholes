@@ -6,6 +6,19 @@ cmsg_types = ['cjoin','cchat','cplay','chand','cswap']
 
 gen_msg_regex = '\[({0})(\|.*)*\]'.format('|'.join(cmsg_types + smsg_types))
 msg_field_regex = '(?<=\|)[\w\ ]*(?=[\]\|])'
+type_regexs = {
+    'cjoin': '^(?=.{16}$)\[cjoin\|[a-zA-Z_]\w{1,7} *\]$',
+    'cchat': '^(?=.{71}$)\[cchat\|.{63}\]$',
+    'cplay': '^(?=.{19}$)\[cplay\|([0-5]\d,){3}[0-5]\d\]$',
+    'chand': '^\[chand\]$',
+    'cswap': '^(?=.{10}$)\[cswap\|[0-5]\d\]$',
+    'slobb': '^((?=.{9,317}$)\[slobb\|((?=.{8}[\]|,])[a-zA-Z_]\w{1,7} *,)*(?=.{8}[\]|,])[a-zA-Z_]\w{1,7} *\]|\[slobb\|\])$',
+    'stabl': '^(?=.{126}$)\[stabl\|([\a\p\w\d\e][0-3]:(?=.{8}:)[a-zA-Z_]\w{1,7} *:[01]\d,){6}[\a\p\w\d\e][0-3]:(?=.{8}:)[a-zA-Z_]\w{1,7} *:[01]\d\|([0-5]\d,){3}[0-5]\d\|[01]\]$'
+    }
+
+compiled_type_regexs = {}
+for key, val in type_regexs.items():
+    compiled_type_regexs[key] = re.compile(val)
 
 class PlayerStatus:
     # used to create player_stat objects that have the following fields:
@@ -39,7 +52,7 @@ def retrieve_msg_from_buff(buff):
 
 def str_to_cards(string):
     cards = string.split(',')
-    cards = [int(card) for card in cards if int(card) != 52]
+    cards = [int(card) for card in cards if int(card) < 52]
     return cards
 
 def cards_to_str(cards, list_len):
@@ -66,7 +79,13 @@ def msg_to_hand(msg):
     return cards
 
 def is_valid(msg):
-    return re.match(gen_msg_regex, msg)
+    if not re.match(gen_msg_regex, msg):
+        return False
+    msg_typ = msg_type(msg)
+    if msg_typ in compiled_type_regexs:
+        return compiled_type_regexs[msg_typ].match(msg)
+    else:
+        return True
 
 def msg_type(msg):
     assert(msg)

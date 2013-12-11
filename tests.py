@@ -285,7 +285,7 @@ def test_game(host, num_bots=6, gui=True):
     if gui:
         my_client_thread.join()
     else:
-        TEST_DURATION = 2
+        TEST_DURATION = 5
         print("Running {} sec automated game".format(TEST_DURATION))
         for i in range(TEST_DURATION):
             time.sleep(1)
@@ -304,7 +304,7 @@ if __name__ == '__main__':
     # unittest.main()
     h = '192.168.10.100'
     lh = 'localhost'
-    GUI = True
+    GUI = False 
     if not GUI:
         # speed test
         print("Performing automated test to see if game crashes")
