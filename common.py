@@ -202,6 +202,9 @@ class Table:
         if self.played_cards == [] or self.played_cards[-1] == []:
             # last play is empty, this play is valid
             return
+        elif cards[0] // 4 == 12:
+            # they played a 2
+            return
         else:
             last_play = self.played_cards[-1]
             if cards[0] // 4 < last_play[0] // 4:

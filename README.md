@@ -22,6 +22,9 @@ Bugs:
 + x Server crashing when unitialized clients disconnect
 + x Email to prevent having to wait for os to free socket
 + x server 230: len(hands) != len(players_at_table)
+- Get ^ lined up properly in gui hand
+- Deal with GUI hand card overflow
+- x One 2 beats anything
 
 Other:
 - Cleanup code

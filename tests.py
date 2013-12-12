@@ -270,7 +270,6 @@ def test_game(host, num_bots=6, gui=True):
         'turdhead',
         'rufus   '
         ]
-    names = ['poop' for i in range(40)]
     server_thread = threading.Thread(target=server.main, args=(['-s', host],))
     server_thread.start()
     if gui:

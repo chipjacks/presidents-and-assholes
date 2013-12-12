@@ -40,6 +40,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         self.player = None
         self.buff = ''
         self.msgs = []
+        self.strikes = 0  # for before player is initialized
 
     def add_to_buffer(self, str):
         logging.debug('Sending: {}'.format(str))
@@ -94,6 +95,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
 
         # add the player to the table or the lobby
         self.player = common.Player(name)
+        self.player.strikes = self.strikes
         client_to_player[self] = self.player
         player_to_client[self.player] = self
         logging.info('Player added to lobby: {}'.format(name))
@@ -155,11 +157,16 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         self.add_to_buffer(msg)
 
     def send_strike(self, code):
-        logging.info('Sending strike to client %s', self.player.name)
-        self.player.strikes += 1
+        if self.player:
+            name = self.player.name
+            self.player.strikes += 1
+        else:
+            name = '(player name not initialized)'
+            self.strikes += 1
+        logging.info('Sending strike to client %s', name)
         self.add_to_buffer('[strik|{}|{}]'.format(code, self.player.strikes))
         if self.player.strikes >= 3:
-            # kick him
+            # kick em
             self.handle_close()
 
     def handle_close(self):
@@ -384,14 +391,9 @@ class GameServer(asyncore.dispatcher):
         # reset the table
         table.players = []
         self.clients_at_table = []
-        # add players back onto table
-        for player in table.winners:
-            self.add_player_to_table(player_to_client[player]._uid, player)
+        # add players back into lobby 
+        lobby = table.winners + lobby
         table.winners = []
-        # fill remaining slots with players from lobby
-        while (len(table.players) < 7 and lobby):
-            self.add_player_to_table(player_to_client[lobby[0]]._uid, lobby[0])
-            lobby = lobby[1:]
 
         # send a lobby update message
         server.send_slobb()
@@ -481,7 +483,7 @@ def start_game():
         try:
             while not len(lobby) >= MINPLAYERS:
                 wait_for_players()
-                logging.info('Table not ready, players: {}'.format(repr(lobby)))
+                logging.info('Table not ready, players: {}'.format([p.name for p in lobby]))
 
             # move players from lobby to table
             for player in lobby[:7]:
