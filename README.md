@@ -1,8 +1,13 @@
-presidents-and-assholes
+Warlords-and-Scumbags
 =======================
 
 Server, client, and curses text-based GUI to play the Presidents and
 Assholes (aka Warlords and Scumbags) card game over the network.
+
+The client GUI runs in your shell window, so in order to see the whole
+interface, your shell window must have at least 100 columns and 50 rows before
+your start the client. If the client crashes while the GUI is running, use the
+'reset' command to get your shell back to normal. 
 
 Todo
 ---
@@ -16,7 +21,8 @@ Features:
 + x First hand starts with 3 of clubs
 + x Start players in lobby instead of at table
 + x Lobby limit
-- Finish command line parameters
+- x Finish command line parameters
+- x Make sure server buffer doesn't overflow
 
 Bugs:
 + x Server crashing when unitialized clients disconnect

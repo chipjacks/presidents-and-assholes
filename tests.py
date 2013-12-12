@@ -270,6 +270,8 @@ def test_game(host, num_bots=6, gui=True):
         'turdhead',
         'rufus   '
         ]
+
+    names += ['john' for i in range(50)]
     server_thread = threading.Thread(target=server.main, args=(['-s', host],))
     server_thread.start()
     if gui:
@@ -303,16 +305,16 @@ if __name__ == '__main__':
     # unittest.main()
     h = '192.168.10.100'
     lh = 'localhost'
-    GUI =  True
+    GUI = True
     if not GUI:
         # speed test
         print("Performing automated test to see if game crashes")
         client.AUTOPLAY_PAUSE = 0
-        test_game(lh, 30, gui=GUI)
+        test_game(lh, 60, gui=GUI)
     else:
         print("Starting GUI to test user interaction")
         time.sleep(.5)
         # gui test
         client.AUTOPLAY_PAUSE = .1
-        test_game(lh, 15, gui=GUI)
+        test_game(lh, 60, gui=GUI)
     logging.info('Logging finished')

@@ -57,6 +57,11 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             logging.info('Server received message: %s', msg)
             msg, self.buff = message.retrieve_msg_from_buff(self.buff)
 
+        if len(self.buff) > 80:
+            # must be filled with crap
+            self.buff = ''
+            self.send_strike('32')
+
         self.parse_msgs()
 
     def parse_msgs(self):
