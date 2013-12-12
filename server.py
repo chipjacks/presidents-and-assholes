@@ -23,6 +23,7 @@ import random
 MAX_CLIENTS = 20
 TURNTIMEOUT = 15
 LOBBYTIMEOUT = 15
+MINPLAYERS = 3
 RUNNING = False
 
 table = common.Table()
@@ -476,30 +477,33 @@ def stop():
 def start_game():
     global RUNNING
     global lobby
-    minplayers = 3
     while RUNNING:
-        while not len(lobby) >= minplayers:
-            wait_for_players()
-            logging.info('Table not ready, players: {}'.format(repr(lobby)))
+        try:
+            while not len(lobby) >= MINPLAYERS:
+                wait_for_players()
+                logging.info('Table not ready, players: {}'.format(repr(lobby)))
 
-        # move players from lobby to table
-        for player in lobby[:7]:
-            server.add_player_to_table(player_to_client[player]._uid, player)
-        lobby = lobby[7:]
+            # move players from lobby to table
+            for player in lobby[:7]:
+                server.add_player_to_table(player_to_client[player]._uid, player)
+            lobby = lobby[7:]
 
-        logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
-        
-        # deal the cards
-        server.send_hands()
+            logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
+            
+            # deal the cards
+            server.send_hands()
 
-        # send the initial stabl
-        server.send_stabl()
+            # send the initial stabl
+            server.send_stabl()
 
-        # start the game
-        main_loop()
+            # start the game
+            main_loop()
+        except Exception as e:
+            logging.info('Caught exception %s', e)
+            continue
 
-        # shutdown server
-        server.shutdown()
+    # shutdown server
+    server.shutdown()
 
 # Main, command-line interaction
 
@@ -507,7 +511,7 @@ def usage():
     print(__doc__)
 
 def parse_cmd_args(argv):
-    turntimeout, lobbytimeout, minplayers = 15, -1, 3 # defaults
+    turntimeout, lobbytimeout, minplayers = 15, 15, 3 # defaults
 
     try:
         opts, args = getopt.getopt(argv, 'ht:l:m:s:', ['help', 'turntimeout', 'minplayers', 'lobbytimeout', 'host'])
@@ -517,11 +521,11 @@ def parse_cmd_args(argv):
                 usage()
                 sys.exit()
             elif opt in ('-t', '--turntimeout'):
-                turntimeout = arg
+                turntimeout = int(arg)
             elif opt in ('-l', '--lobbytimeout'):
-                lobbytimeout = arg
+                lobbytimeout = int(arg)
             elif opt in ('-m', '--minplayers'):
-                minplayers = arg
+                minplayers = int(arg)
             elif opt in ('-s', '--host'):
                 common.HOST = arg
             else:
@@ -535,7 +539,10 @@ def parse_cmd_args(argv):
         return turntimeout, lobbytimeout, minplayers
 
 def main(argv):
-    turntimeout, lobbytimeout, minplayers = parse_cmd_args(argv)
+    global TURNTIMEOUT
+    global LOBBYTIMEOUT
+    global MINPLAYERS
+    TURNTIMEOUT, LOBBYTIMEOUT, MINPLAYERS = parse_cmd_args(argv)
 
     start_server()
     logging.info('Game server started')

@@ -9,8 +9,8 @@ Todo
 
 Features:
 - 3 Out of turn play handling in GUI
-- 2 Make server crash proof
-- x Validate messages (Regular expressions)
+- x Make server crash proof
++ x Validate messages (Regular expressions)
 + x Implement chand
 + x Name mangling
 + x First hand starts with 3 of clubs
@@ -19,10 +19,10 @@ Features:
 - Finish command line parameters
 
 Bugs:
-- Server crashing when unitialized clients disconnect
++ x Server crashing when unitialized clients disconnect
 + x Email to prevent having to wait for os to free socket
 + x server 230: len(hands) != len(players_at_table)
-- Check on swapping no cards
 
 Other:
 - Cleanup code
+- Check on swapping no cards
