@@ -1,5 +1,6 @@
 import re
 import common
+import copy
 
 smsg_types = ['slobb', 'stabl', 'sjoin', 'shand', 'strik', 'schat', 'swapw', 'swaps']
 cmsg_types = ['cjoin','cchat','cplay','chand','cswap']
@@ -7,12 +8,12 @@ cmsg_types = ['cjoin','cchat','cplay','chand','cswap']
 gen_msg_regex = '\[({0})(\|.*)*\]'.format('|'.join(cmsg_types + smsg_types))
 msg_field_regex = '(?<=\|)[\w\ ]*(?=[\]\|])'
 type_regexs = {
-    'cjoin': '^(?=.{16}$)\[cjoin\|[a-zA-Z_]\w{1,7} *\]$',
+    'cjoin': '^(?=.{16}$)\[cjoin\|[a-zA-Z_]\w{0,7} *\]$',
     'cchat': '^(?=.{71}$)\[cchat\|.{63}\]$',
     'cplay': '^(?=.{19}$)\[cplay\|([0-5]\d,){3}[0-5]\d\]$',
     'chand': '^\[chand\]$',
     'cswap': '^(?=.{10}$)\[cswap\|[0-5]\d\]$',
-    'slobb': '^((?=.{9,317}$)\[slobb\|((?=.{8}[\]|,])[a-zA-Z_]\w{1,7} *,)*(?=.{8}[\]|,])[a-zA-Z_]\w{1,7} *\]|\[slobb\|\])$',
+    'slobb': '^((?=.{9,317}$)\[slobb\|((?=.{8}[\]|,])[a-zA-Z_]\w{0,7} *,)*(?=.{8}[\]|,])[a-zA-Z_]\w{1,7} *\]|\[slobb\|\])$',
     'stabl': '^(?=.{126}$)\[stabl\|([\a\p\w\d\e][0-3]:(?=.{8}:)[a-zA-Z_]\w{1,7} *:[01]\d,){6}[\a\p\w\d\e][0-3]:(?=.{8}:)[a-zA-Z_]\w{1,7} *:[01]\d\|([0-5]\d,){3}[0-5]\d\|[01]\]$'
     }
 
@@ -44,11 +45,18 @@ def retrieve_msg_from_buff(buff):
         return None, buff
 
     assert(buff[0] == '[')
+    if buff[0] == '[':
+        start = 0
+    else:
+        logging.info('buffer has some garbage at the start: %s', buff)
+        start = buff.find('[')
+        if start == -1:
+            return None, ''
     end = buff.find(']')
     if end == -1:
         return None, buff
 
-    return buff[0:end+1], buff[end+1:]
+    return buff[start:end+1], buff[end+1:]
 
 def str_to_cards(string):
     cards = string.split(',')
@@ -114,17 +122,19 @@ def player_stat(player):
     return ret
 
 def table_to_stabl(table):
+    # make a copy to ensure table doesn't change while we are doing this
+    table_copy = copy.deepcopy(table)
     msg = '[stabl|'
-    for player in table.players:
+    for player in table_copy.players:
         msg += player_stat(player)
         msg += ','
-    emptyseats = common.TABLESIZE - len(table.players)
+    emptyseats = common.TABLESIZE - len(table_copy.players)
     for i in range(emptyseats):
         msg += player_stat(None)
         msg += ','
     msg = msg[:-1] + '|'  # replace trailing comma
-    msg += cards_to_str(table.last_play(), 4)
-    if (table.starting_round):
+    msg += cards_to_str(table_copy.last_play(), 4)
+    if (table_copy.starting_round):
         msg += '|1]'
     else:
         msg += '|0]'

@@ -3,6 +3,7 @@
 *.log
 *.swp
 __pycache__
+*.zip
 
 # C extensions
 *.so

@@ -57,7 +57,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             logging.info('Server received message: %s', msg)
             msg, self.buff = message.retrieve_msg_from_buff(self.buff)
 
-        if len(self.buff) > 80:
+        if len(self.buff) > 1000:
             # must be filled with crap
             self.buff = ''
             self.send_strike('32')
@@ -86,6 +86,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
                 self.send_shand()
 
     def handle_cjoin(self, msg):
+        global lobby
         fields = message.fields(msg)
         assert(len(fields) == 1)
         assert(len(fields[0]) == 8)
@@ -107,7 +108,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         lobby.append(self.player)
         server.send_slobb()
         # reply with sjoin
-        self.add_to_buffer('[sjoin|{}]'.format(name))
+        self.add_to_buffer('[sjoin|{}]'.format(name.ljust(8)))
 
     def handle_cplay(self, msg):
         fields = message.fields(msg)
@@ -165,17 +166,27 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         if self.player:
             name = self.player.name
             self.player.strikes += 1
+            strikes = self.player.strikes
         else:
             name = '(player name not initialized)'
             self.strikes += 1
+            strikes = self.strikes
         logging.info('Sending strike to client %s', name)
-        self.add_to_buffer('[strik|{}|{}]'.format(code, self.player.strikes))
+        self.add_to_buffer('[strik|{}|{}]'.format(code, strikes))
         if self.player.strikes >= 3:
             # kick em
             self.handle_close()
 
     def handle_close(self):
+        global lobby
         if self.player in table.players:
+            self.player.hand = []
+            if self.player.status == 'a':
+                # pass for them
+                active_players = table.active_players()
+                table.turn %= len(active_players)
+                active_players[table.turn].status = 'a'
+                server.new_play = True
             self.player.status = 'd'
             logging.info('Player {} left the table'.format(self.player.name))
         elif self.player in lobby:
@@ -263,8 +274,7 @@ class GameServer(asyncore.dispatcher):
             client.add_to_buffer(msg)
 
     def send_slobb(self):
-        if not lobby:
-            return
+        global lobby
         msg = message.lobby_to_slobb(lobby)
         logging.info('Server broadcasting: ' + msg)
         for client in self.clients.values():
@@ -403,8 +413,6 @@ class GameServer(asyncore.dispatcher):
         # send a lobby update message
         server.send_slobb()
 
-        start_game()
-
 def mangle_name(current_names, name):
     name_regex = '^[a-zA-Z_]\w{0,7}$'
     if not re.match(name_regex, name):
@@ -448,6 +456,7 @@ def start_server_in_thread():
 
 def wait_for_players():
     global RUNNING
+    global LOBBYTIMEOUT
     timeout = time.time() + LOBBYTIMEOUT
     while asyncore.socket_map and RUNNING:
         asyncore.loop(timeout=0.5, count=1)
@@ -456,23 +465,42 @@ def wait_for_players():
 
 def main_loop():
     global RUNNING
+    global TURNTIMEOUT
+    global lobby
     turntimeout = time.time() + TURNTIMEOUT
     while asyncore.socket_map and RUNNING:
         if len(table.players) < 2:
-            # games over, everyone bailed
-            logging.info('Game ended because too many people bailed')
-            return
+            server.finish_game()
+            # start a new game
+            while not len(lobby) >= MINPLAYERS:
+                wait_for_players()
+                logging.info('Table not ready, players: {}'.format([p.name for p in lobby]))
+
+            # move players from lobby to table
+            for player in lobby[:7]:
+                server.add_player_to_table(player_to_client[player]._uid, player)
+            lobby = lobby[7:]
+            server.send_slobb()
+
+            logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
+            
+            # deal the cards
+            server.send_hands()
+
+            # send the initial stabl
+            server.send_stabl()
         # wait for players to play
         turntimeleft = turntimeout - time.time()
-        asyncore.loop(timeout=turntimeleft, count = 1)
+        if turntimeleft > 0:
+            asyncore.loop(timeout=turntimeleft, count = 1)
         if server.new_play:
             server.new_play = False
-            turntimeout = time.time() + 15
+            turntimeout = time.time() + TURNTIMEOUT
         else:
             if turntimeout - time.time() <= 0.1:
                 # the client timed out
                 server.play_timedout()
-                turntimeout = time.time() + 15
+                turntimeout = time.time() + TURNTIMEOUT
             else:
                 # they still have some time
                 pass
@@ -484,8 +512,9 @@ def stop():
 def start_game():
     global RUNNING
     global lobby
+    global MINPLAYERS
     while RUNNING:
-        try:
+#        try:
             while not len(lobby) >= MINPLAYERS:
                 wait_for_players()
                 logging.info('Table not ready, players: {}'.format([p.name for p in lobby]))
@@ -494,6 +523,7 @@ def start_game():
             for player in lobby[:7]:
                 server.add_player_to_table(player_to_client[player]._uid, player)
             lobby = lobby[7:]
+            server.send_slobb()
 
             logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
             
@@ -505,9 +535,9 @@ def start_game():
 
             # start the game
             main_loop()
-        except Exception as e:
-            logging.info('Caught exception %s', e)
-            continue
+#        except Exception as e:
+#            logging.info('Caught exception %s', e)
+#            continue
 
     # shutdown server
     server.shutdown()

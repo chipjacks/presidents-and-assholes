@@ -31,6 +31,7 @@ Bugs:
 - Get ^ lined up properly in gui hand
 - Deal with GUI hand card overflow
 - x One 2 beats anything
+- messages.py line 46 crash - leads to swaps bomb from server
 
 Other:
 - Cleanup code

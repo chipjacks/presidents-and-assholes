@@ -9,7 +9,7 @@ import time
 import threading
 import queue
 
-AUTOPLAY_PAUSE = 1
+AUTOPLAY_PAUSE = 0
 
 def current_turn_num(player_stat_list):
     assert(player_stat_list)
@@ -415,6 +415,13 @@ def main(argv):
     manual, name = parse_cmd_args(argv)
     auto = not manual
 
+    if auto:
+        common.setup_logging()
+    else:
+        FORMAT = '%(filename)s: %(message)s'
+        logging.basicConfig(level=logging.DEBUG, format=FORMAT,
+            filename='client.log')
+        logging.info('Logging started')
     client = Client(name, common.HOST, common.PORT, auto=auto)
 
     # join the server
@@ -449,7 +456,6 @@ def main(argv):
 
 
 if __name__ == '__main__':
-    common.setup_logging()
     main(sys.argv[1:])
     logging.info('Logging finished')
     
