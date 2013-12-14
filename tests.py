@@ -316,5 +316,5 @@ if __name__ == '__main__':
         time.sleep(.5)
         # gui test
         client.AUTOPLAY_PAUSE = .1
-        test_game(lh, 60, gui=GUI)
+        test_game(lh, 10, gui=GUI)
     logging.info('Logging finished')

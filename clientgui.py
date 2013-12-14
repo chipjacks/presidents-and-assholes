@@ -13,7 +13,7 @@ MSGS_HEIGHT = 11
 TABLE_HEIGHT = 11
 LOBBY_WIDTH = 15
 HAND_HEIGHT = 8
-LOBBY_HEIGHT = HAND_HEIGHT + HAND_HEIGHT
+LOBBY_HEIGHT = HAND_HEIGHT + TABLE_HEIGHT
 HAND_WIDTH = SCRN_WIDTH - LOBBY_WIDTH
 PLAY_WIDTH = SCRN_WIDTH // 3
 CHAT_WIDTH = SCRN_WIDTH - PLAY_WIDTH
@@ -114,6 +114,7 @@ class ClientGui():
 
     def curses_loop(self, stdscr):
         self.build_windows(stdscr)
+        self.print_msg("If this GUI crashes, type 'reset' into your shell to get it back to normal")
         while self.client.run:
             c = self.play_win.getkey()
             # self.print_msg('Got key {}'.format(ord(c)))
@@ -238,16 +239,23 @@ class ClientGui():
     def update_play(self):
         self.lock.acquire()
         self.play_input_win.addstr(3, 2, 
-            self.print_cards(self.play).ljust(PLAY_INPUT_WIDTH - 3))
+                self.print_cards(self.play[:4]).ljust(PLAY_INPUT_WIDTH - 3))
         self.play_input_win.refresh()
 
         hand_indexes = [self.hand.index(c) for c in self.play]
         play_str = ''
         for i in range(len(self.hand)):
             if i in hand_indexes:
-                play_str += ('^    ')
+                if self.hand[i] // 4 == 7:
+                    # it's a ten
+                    play_str += ('^     ')
+                else:
+                    play_str += ('^    ')
             else:
-                play_str += ('     ')
+                if self.hand[i] // 4 == 7:
+                    play_str += ('      ')
+                else:
+                    play_str += ('     ')
 
         self.hand_win.addstr(6, 2, play_str.ljust(HAND_WIDTH-3))
         self.hand_win.refresh()
@@ -360,9 +368,9 @@ class ClientGui():
 
     def update_lobby(self, lobby):
         self.lock.acquire()
-        for i in range(2, LOBBY_HEIGHT):
+        for i in range(2, LOBBY_HEIGHT-2):
             self.lobby_win.addstr(i, 2, ' '*(LOBBY_WIDTH-3))
-        for i, name in enumerate(lobby[:LOBBY_HEIGHT-3]):
+        for i, name in enumerate(lobby[:LOBBY_HEIGHT-4]):
             self.lobby_win.addstr(i+2, 2, name)
         if len(lobby) > LOBBY_HEIGHT - 3:
             self.lobby_win.addstr(LOBBY_HEIGHT-2, 2, '...')

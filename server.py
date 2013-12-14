@@ -106,9 +106,9 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         player_to_client[self.player] = self
         logging.info('Player added to lobby: {}'.format(name))
         lobby.append(self.player)
-        server.send_slobb()
         # reply with sjoin
         self.add_to_buffer('[sjoin|{}]'.format(name.ljust(8)))
+        server.send_slobb()
 
     def handle_cplay(self, msg):
         fields = message.fields(msg)
@@ -216,7 +216,7 @@ class GameServer(asyncore.dispatcher):
         self.create_socket()
         self.set_reuse_addr()
         self.bind((host, port))
-        self.listen(5)
+        self.listen(20)
         self._next_uid = 1
         self.clients = {} 
         self.clients_at_table = []
@@ -534,7 +534,7 @@ def start_game():
             lobby = lobby[7:]
             server.send_slobb()
 
-            logging.info('Table ready, game starting, number players: {}'.format(len(lobby)))
+            logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
             
             # deal the cards
             server.send_hands()
@@ -582,6 +582,12 @@ def parse_cmd_args(argv):
         usage()
         sys.exit()
     else:
+        if minplayers < 3:
+            minplayers = 3
+        if lobbytimeout < 0:
+            lobbytimeout = 15
+        if turntimeout < 1:
+            turntimeout = 1
         return turntimeout, lobbytimeout, minplayers
 
 def main(argv):

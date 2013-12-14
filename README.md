@@ -13,7 +13,7 @@ Todo
 ---
 
 Features:
-- 3 Out of turn play handling in GUI
+- Out of turn play handling in GUI
 - x Make server crash proof
 + x Validate messages (Regular expressions)
 + x Implement chand
@@ -28,10 +28,10 @@ Bugs:
 + x Server crashing when unitialized clients disconnect
 + x Email to prevent having to wait for os to free socket
 + x server 230: len(hands) != len(players_at_table)
-- Get ^ lined up properly in gui hand
+- x Get ^ lined up properly in gui hand
 - Deal with GUI hand card overflow
 - x One 2 beats anything
-- messages.py line 46 crash - leads to swaps bomb from server
+- x messages.py line 46 crash - leads to swaps bomb from server
 
 Other:
 - Cleanup code

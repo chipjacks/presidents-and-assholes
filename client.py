@@ -188,7 +188,8 @@ class Client():
             fields = message.fields(msg)
             who = fields[0]
             what = fields[1]
-            self.gui.update_chat(who, what)
+            if self.gui:
+                self.gui.update_chat(who, what)
         elif msg_type == 'swapw':
             # notifies warlord of swap offer from scumbag
             fields = message.fields(msg)
@@ -419,44 +420,48 @@ def parse_cmd_args(argv):
 def main(argv):
     manual, name = parse_cmd_args(argv)
     auto = not manual
+    client = None
 
-    if auto:
-        common.setup_logging()
-    else:
-        FORMAT = '%(filename)s: %(message)s'
-        logging.basicConfig(level=logging.DEBUG, format=FORMAT,
-            filename='client.log')
-        logging.info('Logging started')
-    client = Client(name, common.HOST, common.PORT, auto=auto)
+    try:
+        if auto:
+            common.setup_logging()
+        else:
+            FORMAT = '%(filename)s: %(message)s'
+            logging.basicConfig(level=logging.DEBUG, format=FORMAT,
+                filename='client.log')
+            logging.info('Logging started')
+        client = Client(name, common.HOST, common.PORT, auto=auto)
 
-    # join the server
-    client.send_msg('[cjoin|{}]'.format(name.ljust(8)))
-    while not client.msgs:
-        client.recv_msgs()
+        # join the server
+        client.send_msg('[cjoin|{}]'.format(name.ljust(8)))
+        while not client.msgs:
+            client.recv_msgs()
 
-    msg = client.get_msg()
-    assert msg, 'No msg, self.msgs = '.format(client.msgs)
-    while message.msg_type(msg) != 'sjoin':
-        # logging.warn('Client {} received an unexpected message: {}'.format(client.name, msg))
         msg = client.get_msg()
-    
-    # validate msg
-    name = message.fields(msg)[0].strip()
-    client.player = common.Player(name)
-    logging.info('Client {} successfully joined with name {}'.format(client.name, name))
-    if client.gui:
-        client.gui.print_msg("Succesfully joined server with name {}".format(
-            client.player.name))
+        assert msg, 'No msg, self.msgs = '.format(client.msgs)
+        while message.msg_type(msg) != 'sjoin':
+            # logging.warn('Client {} received an unexpected message: {}'.format(client.name, msg))
+            msg = client.get_msg()
+        
+        # validate msg
+        name = message.fields(msg)[0].strip()
+        client.player = common.Player(name)
+        logging.info('Client {} successfully joined with name {}'.format(client.name, name))
+        if client.gui:
+            client.gui.print_msg("Succesfully joined server with name {}".format(
+                client.player.name))
 
-    client.game_loop()
+        client.game_loop()
 
-    if client.gui: client.gui.print_msg("Quitting, press any key to confirm")
+        if client.gui: client.gui.print_msg("Quitting, press any key to confirm")
 
-    client.disconnect()
+        client.disconnect()
 
-    if client.gui:
-        client.gui.curses_thread.join()
-    logging.info("Client %s quitting", client.name)
+        if client.gui:
+            client.gui.curses_thread.join()
+        logging.info("Client %s quitting", client.name)
+    except BaseException as ex:
+        logging.info('Client caught exception: %s', ex)
     return
 
 
