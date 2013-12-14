@@ -180,14 +180,19 @@ class PlayerHandler(asyncore.dispatcher_with_send):
     def handle_close(self):
         global lobby
         if self.player in table.players:
-            self.player.hand = []
             if self.player.status == 'a':
                 # pass for them
+                self.player.status = 'd'
                 active_players = table.active_players()
-                table.turn %= len(active_players)
-                active_players[table.turn].status = 'a'
+                if len(active_players) <= 1:
+                    table.turn = 0
+                    server.finish_game()
+                else:
+                    table.turn %= len(active_players)
+                    active_players[table.turn].status = 'a'
                 server.new_play = True
-            self.player.status = 'd'
+            else:
+                self.player.status = 'd'
             logging.info('Player {} left the table'.format(self.player.name))
         elif self.player in lobby:
             logging.info('Player {} left the lobby'.format(self.player.name))
@@ -200,8 +205,8 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             table.winners.remove(self.player)
         elif self.player:
             logging.info('Player {} can\'t be found'.format(self.player.name))
-        server.handle_client_disconnect(self._uid)
-        player_to_client.pop(self.player, None)
+        # server.handle_client_disconnect(self._uid)
+        # player_to_client.pop(self.player, None)
         self.close()
 
 class GameServer(asyncore.dispatcher):
@@ -383,6 +388,7 @@ class GameServer(asyncore.dispatcher):
                 break
         else:
             logging.info('Play timed out, but no player active.')
+            server.finish_game()
             return
         client = player_to_client[who]
         # pass for him
@@ -478,7 +484,10 @@ def main_loop():
 
             # move players from lobby to table
             for player in lobby[:7]:
-                server.add_player_to_table(player_to_client[player]._uid, player)
+                try:
+                    server.add_player_to_table(player_to_client[player]._uid, player)
+                except KeyError as e:
+                    pass
             lobby = lobby[7:]
             server.send_slobb()
 

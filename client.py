@@ -319,8 +319,7 @@ class Client():
             for player in psl:
                 if player.status in ('a', 'w', 'p') and player.num_cards > 0:
                     active_players.append(player)
-            assert(len(active_players) != 0)
-            if len(active_players) == 1:
+            if len(active_players) <= 1:
                 # the game is over!
                 self.in_game = False
                 self.waiting_for_play = False
@@ -329,7 +328,10 @@ class Client():
                 self.player_num = None
                 self.cleanup_wait_thread()
                 self.wait_thread = None
-                asshole = active_players[0]
+                try:
+                    asshole = active_players[0]
+                except IndexError:
+                    asshole = None
                 self.prev_player_stat_list = None
 
         if asshole:
@@ -364,6 +366,9 @@ class Client():
             # play lowest card
             return [hand[0]]
         elif (len(last_play) == 1):
+            if last_play[0] // 4 == 12:
+                # it was a two, you get to go again
+                return [hand[0]]
             # play lowest card that beats it
             for card in hand:
                 if card >= last_play[0]:

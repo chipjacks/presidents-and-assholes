@@ -111,7 +111,9 @@ class Table:
 
     def play_cards(self, player, cards):
         assert(isinstance(cards, list))
-        assert(len(self.players) > 1) # make sure the game should still be going
+        # assert(len(self.players) > 1) # make sure the game should still be going
+        if (len(self.players) < 2):
+            pass
         # validate play
         self.validate_play(player, cards)
 
