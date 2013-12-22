@@ -305,7 +305,7 @@ if __name__ == '__main__':
     # unittest.main()
     h = '192.168.10.100'
     lh = 'localhost'
-    GUI = True
+    GUI = False
     if not GUI:
         # speed test
         print("Performing automated test to see if game crashes")

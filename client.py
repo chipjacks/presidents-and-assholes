@@ -1,17 +1,40 @@
+"""
+Description:
+    Client to play warlords and scumbags game
+
+Usage:
+    python3 client.py <args>
+
+Command line arguments:
+    -h, --help  Print this help.
+
+    -s, --host  Host name of server to connect to.
+                    e.g. 192.168.10.1 or localhost.
+
+    -p, --port  Port to connect to.
+
+    -n, --name  Player name to use in game.
+    
+    -m, --manual    Manual mode. Text based GUI will be displayed in terminal
+                    to play game in. Otherwise an automated client will be
+                    spawned which will automatically play cards and no GUI will
+                    be displayed.
+"""
+
 import common
 import message
 import logging
 import clientgui
 import socket
 import getopt
-import sys
 import time
 import threading
 import queue
 
-AUTOPLAY_PAUSE = 0
+AUTOPLAY_PAUSE = 2  # seconds automated client waits before sending play to server
 
 def current_turn_num(player_stat_list):
+    """Calculates what turn number it is from player_stat_list"""
     assert(player_stat_list)
     for i, player_stat in enumerate(player_stat_list):
         if player_stat.status == 'a':
@@ -22,6 +45,11 @@ def current_turn_num(player_stat_list):
         return -1
 
 class Client():
+    """Main client class that controls communication with server. Spawns GUI for
+    player to play in if manual mode is specified with command line arguments.
+    """
+
+    # Set-up
     def __init__(self, name, host, port, auto=True):
         self.automated = auto
         self.run = True
@@ -45,12 +73,15 @@ class Client():
         logging.info('Client %s created', name)
 
     def connect(self, host, port):
+        """Connect to server socket"""
         self.sockobj.connect((host, port))
         logging.info('Client %s succesfully connected to host: %s, port: %s',
             self.name, host, port)
         if self.gui: self.gui.print_msg("Succesfully connected to server, waiting for join confirmation.")
 
+    # Socket communication
     def send_msg(self, msg):
+        """Send message through socket to server"""
         assert(msg)
         logging.info('Client %s sending msg: %s', self.name, msg)
         msg = msg.encode('ascii')
@@ -76,6 +107,7 @@ class Client():
                 break
 
     def recv_msgs(self):
+        """Receive data from server socket and put them in buffer"""
         try:
             buff = self.sockobj.recv(1024)
             if not buff:
@@ -98,6 +130,7 @@ class Client():
             msg, self.buff = message.retrieve_msg_from_buff(self.buff)
 
     def get_msg(self):
+        """Get first message from list of messages waiting to be processed"""
         if self.msgs:
             ret = self.msgs[0]
             self.msgs = self.msgs[1:]
@@ -105,7 +138,9 @@ class Client():
         else:
             return None
 
+    # Main loop
     def game_loop(self):
+        """Main loop. Receives messages, and processes them in order."""
         while self.run:
             # cleanup any zombie threads
             self.cleanup_wait_thread()
@@ -118,39 +153,11 @@ class Client():
                 self.process_msg(msg)
                 msg = self.get_msg()
 
-    def my_turn_num(self, player_stat_list):
-        assert(self.in_game)
-        if self.player_num != None:
-            return self.player_num
-        else:
-            for idx, player_stat in enumerate(player_stat_list):
-                if player_stat.name == self.player.name:
-                    self.player_num = idx
-                    break
-            else:
-                raise(common.PlayerError(self.player,
-                    'stabl missing this player'))
-        return self.player_num
-    
-    def remove_players_who_are_out(self, player_stat_list):
-        new_psl = []
-        for player_stat in player_stat_list:
-            if player_stat.num_cards > 0:
-                new_psl.append(player_stat)
-        return new_psl
-
-    def detect_winner(self, player_stat_list, prev_player_stat_list):
-        if not prev_player_stat_list:
-            return None
-        for i, ps in enumerate(player_stat_list):
-            if ps.num_cards == 0 and prev_player_stat_list[i].num_cards != 0:
-                # we have a winner!
-                return ps
-        else:
-            return None
-
     def process_msg(self, msg):
-        # validate msg
+        if not messages.is_valid(msg):
+            logging.info("Client %s received invalid message: %s", self.name, 
+                msg)
+            return
         fields = message.fields(msg)
         msg_type = message.msg_type(msg)
 
@@ -244,6 +251,35 @@ class Client():
                         "Received strike (code {}) from server".format(code))
         else:
             logging.info('Client received msg: ' + msg)
+
+    # Utility functions
+    def my_turn_num(self, player_stat_list):
+        """Looks through player list and determines what turn number client is
+        at table.
+        """
+        assert(self.in_game)
+        if self.player_num != None:
+            return self.player_num
+        else:
+            for idx, player_stat in enumerate(player_stat_list):
+                if player_stat.name == self.player.name:
+                    self.player_num = idx
+                    break
+            else:
+                raise(common.PlayerError(self.player,
+                    'stabl missing this player'))
+        return self.player_num
+    
+
+    def detect_winner(self, player_stat_list, prev_player_stat_list):
+        if not prev_player_stat_list:
+            return None
+        for i, ps in enumerate(player_stat_list):
+            if ps.num_cards == 0 and prev_player_stat_list[i].num_cards != 0:
+                # we have a winner!
+                return ps
+        else:
+            return None
 
     def asynch_get_play(self):
         assert(self.gui)
@@ -468,19 +504,3 @@ def main(argv):
 if __name__ == '__main__':
     main(sys.argv[1:])
     logging.info('Logging finished')
-    
-#    client = Client('localhost', 36789, 'chipjack')
-#    names = [
-#        'hiprack ',
-#        'lcp69   ',
-#        'chipple ',
-#        'nipple  ',
-#        'ch8_px__',
-#        'BillyBo ',
-#        'bonnyho ',
-#        'Tman    ',
-#        'chipdrip',
-#        ]
-#    for name in names:
-#        client = Client('localhost', 36789, name, auto=True)
-#    asyncore.loop()

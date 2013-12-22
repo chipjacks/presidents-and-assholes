@@ -8,7 +8,7 @@ LOBBYSIZE = 35
 
 def setup_logging():
     FORMAT = '%(filename)s: %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=FORMAT)
+    logging.basicConfig(level=logging.DEBUG, format=FORMAT, filename='log.log')
     logging.info('Logging started')
 
 class Deck:
