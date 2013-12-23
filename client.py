@@ -15,9 +15,9 @@ Command line arguments:
 
     -n, --name  Player name to use in game.
     
-    -m, --manual    Manual mode. Text based GUI will be displayed in terminal
+    -m, --manual    Manual mode. Text based UI will be displayed in terminal
                     to play game in. Otherwise an automated client will be
-                    spawned which will automatically play cards and no GUI will
+                    spawned which will automatically play cards and no UI will
                     be displayed.
 """
 
