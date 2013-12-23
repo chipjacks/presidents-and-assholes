@@ -1,4 +1,4 @@
-Warlords-and-Scumbags
+Presidents-and-Assholes
 =======================
 
 Server, client, and curses text-based GUI to play the Presidents and
@@ -34,5 +34,4 @@ Bugs:
 - x messages.py line 46 crash - leads to swaps bomb from server
 
 Other:
-- Cleanup code
 - Check on swapping no cards
