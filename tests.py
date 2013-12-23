@@ -1,3 +1,5 @@
+"""Unit tests for utility modules and gameplay test for client and server.
+"""
 import unittest
 import common
 import server
@@ -53,17 +55,6 @@ class TestTable(unittest.TestCase):
             self.a_table.remove_player(players[i])
         self.assertEqual([], self.a_table.players)
         
-    def test_play_cards(self):
-        players = [common.Player(i) for i in range(5)]
-        # self.assertRaises(common.PlayerError, self.a_table.play_cards, players[0], [1,2])
-        for i in range(5):
-            self.a_table.add_player(players[i])
-        players[0].add_to_hand([1,2])
-        self.a_table.play_cards(players[0], [1,2])
-        self.assertEqual(self.a_table.played_cards, [[1,2]])
-        # self.assertRaises(common.PlayerError, self.a_table.play_cards, players[1], {1,2})
-    
-
 invalid_msgs = [
     'asd asdf asd',
     '[asdf asfa sdf',
@@ -99,7 +90,6 @@ invalid_cjoins = [
     ]
 
 class TestMessageHandling(unittest.TestCase):
-
     def setUp(self):
         pass
 
@@ -227,26 +217,6 @@ class TestClient():
         self.socket.shutdown(socket.SHUT_RDWR)
         self.socket.close()
 
-# class TestGameServer(unittest.TestCase):
-#     def setUp(self): 
-#         self.server, self.server_thread = server.start_server_in_thread()
-#         self.clients = [TestClient() for i in range(20)]
-# 
-#     def test_gameplay(self):
-#         i = 0
-#         for cjoin in valid_cjoins:
-#             self.clients[i].send(cjoin)
-#             i += 1
-#         time.sleep(0.1) # give the server a split second to process
-#         self.assertTrue(server.table.full())
-#         self.assertTrue(server.table.ready())
-# 
-#     def tearDown(self):
-#         for client in self.clients:
-#             client.close()
-#         self.server.close()
-#         self.server_thread.join()
-
 def test_game(host, num_bots=6, gui=True):
     if not host:
         host = common.HOST
@@ -302,7 +272,7 @@ def test_game(host, num_bots=6, gui=True):
 
 if __name__ == '__main__':
     common.setup_logging()
-    # unittest.main()
+    # unittest.main()   # Uncomment to unit-test utility functions
     h = '192.168.10.100'
     lh = 'localhost'
     GUI = False

@@ -1,11 +1,20 @@
 """
 Description:
-    Blah blah blah
+    Server to coordinate playing of Warlords and Scumbags card game
 
 Usage:
-    python3 server.py ...
+    python3 server.py <args>
 
+Command line arguments:
+    -h, --help         Print this help.
+
+    -t, --turntimeout  Seconds to wait for clients to play when it's their turn.
+
+    -l, --lobbytimeout Seconds to wait for clients to join before starting game.
+
+    -s, --host         Hostname to run server on.
 """
+
 import common
 import socket
 import asyncore
@@ -19,19 +28,22 @@ import sys
 import re
 import random
 
+# Constants
 MAX_CLIENTS = 20
 TURNTIMEOUT = 15
 LOBBYTIMEOUT = 15
 MINPLAYERS = 3
 RUNNING = False
 
-table = common.Table()
-lobby = []
-client_to_player = {}
-player_to_client = {}
+# Module globals
+table = common.Table()  # Manages gameplay and players at table
+lobby = []              # List of players waiting in lobby
+client_to_player = {}   # Maps client to corresponding player
+player_to_client = {}   # Maps player to corresponding client
 server = None
 
 class PlayerHandler(asyncore.dispatcher_with_send):
+    """Manages communication with an individual client."""
 
     def __init__(self, uid, sock=None, map=None):
         asyncore.dispatcher_with_send.__init__(self, sock)
@@ -41,6 +53,7 @@ class PlayerHandler(asyncore.dispatcher_with_send):
         self.msgs = []
         self.strikes = 0  # for before player is initialized
 
+    # Socket communication
     def add_to_buffer(self, str):
         logging.debug('Sending: {}'.format(str))
         self.out_buffer += bytes(str, 'ascii')
@@ -63,6 +76,28 @@ class PlayerHandler(asyncore.dispatcher_with_send):
 
         self.parse_msgs()
 
+    def send_shand(self):
+        if not self.player or not self.player.hand:
+            return
+        msg = message.hand_to_msg(self.player.hand)
+        self.add_to_buffer(msg)
+
+    def send_strike(self, code):
+        if self.player:
+            name = self.player.name
+            self.player.strikes += 1
+            strikes = self.player.strikes
+        else:
+            name = '(player name not initialized)'
+            self.strikes += 1
+            strikes = self.strikes
+        logging.info('Sending strike to client %s', name)
+        self.add_to_buffer('[strik|{}|{}]'.format(code, strikes))
+        if self.player.strikes >= 3:
+            # kick em
+            self.handle_close()
+
+    # Message parsing
     def parse_msgs(self):
         msgs = self.msgs
         self.msgs = []
@@ -154,27 +189,6 @@ class PlayerHandler(asyncore.dispatcher_with_send):
             return
         name = self.player.name
         server.send_schat(name, chat)
-
-    def send_shand(self):
-        if not self.player or not self.player.hand:
-            return
-        msg = message.hand_to_msg(self.player.hand)
-        self.add_to_buffer(msg)
-
-    def send_strike(self, code):
-        if self.player:
-            name = self.player.name
-            self.player.strikes += 1
-            strikes = self.player.strikes
-        else:
-            name = '(player name not initialized)'
-            self.strikes += 1
-            strikes = self.strikes
-        logging.info('Sending strike to client %s', name)
-        self.add_to_buffer('[strik|{}|{}]'.format(code, strikes))
-        if self.player.strikes >= 3:
-            # kick em
-            self.handle_close()
 
     def handle_close(self):
         global lobby
@@ -522,30 +536,26 @@ def start_game():
     global lobby
     global MINPLAYERS
     while RUNNING:
-#        try:
-            while not len(lobby) >= MINPLAYERS:
-                wait_for_players()
-                logging.info('Table not ready, players: {}'.format([p.name for p in lobby]))
+        while not len(lobby) >= MINPLAYERS:
+            wait_for_players()
+            logging.info('Table not ready, players: {}'.format([p.name for p in lobby]))
 
-            # move players from lobby to table
-            for player in lobby[:7]:
-                server.add_player_to_table(player_to_client[player]._uid, player)
-            lobby = lobby[7:]
-            server.send_slobb()
+        # move players from lobby to table
+        for player in lobby[:7]:
+            server.add_player_to_table(player_to_client[player]._uid, player)
+        lobby = lobby[7:]
+        server.send_slobb()
 
-            logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
-            
-            # deal the cards
-            server.send_hands()
+        logging.info('Table ready, game starting, number players: {}'.format(len(table.players)))
+        
+        # deal the cards
+        server.send_hands()
 
-            # send the initial stabl
-            server.send_stabl()
+        # send the initial stabl
+        server.send_stabl()
 
-            # start the game
-            main_loop()
-#        except Exception as e:
-#            logging.info('Caught exception %s', e)
-#            continue
+        # start the game
+        main_loop()
 
     # shutdown server
     server.shutdown()

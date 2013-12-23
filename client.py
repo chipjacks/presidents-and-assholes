@@ -21,6 +21,7 @@ Command line arguments:
                     be displayed.
 """
 
+import sys
 import common
 import message
 import logging
@@ -34,7 +35,7 @@ import queue
 AUTOPLAY_PAUSE = 2  # seconds automated client waits before sending play to server
 
 def current_turn_num(player_stat_list):
-    """Calculates what turn number it is from player_stat_list"""
+    """Calculates what turn number it is from player_stat_list."""
     assert(player_stat_list)
     for i, player_stat in enumerate(player_stat_list):
         if player_stat.status == 'a':
@@ -138,7 +139,7 @@ class Client():
         else:
             return None
 
-    # Main loop
+    # Main loop, message processing
     def game_loop(self):
         """Main loop. Receives messages, and processes them in order."""
         while self.run:
@@ -154,7 +155,8 @@ class Client():
                 msg = self.get_msg()
 
     def process_msg(self, msg):
-        if not messages.is_valid(msg):
+        """Process message based on type."""
+        if not message.is_valid(msg):
             logging.info("Client %s received invalid message: %s", self.name, 
                 msg)
             return
@@ -252,6 +254,65 @@ class Client():
         else:
             logging.info('Client received msg: ' + msg)
 
+    def process_stabl(self, msg):
+        """Process table status message, prompt user for play if necessary."""
+        logging.info('Client %s processing stabl: ' + msg, self.name)
+        psl = message.stabl_to_player_stat_list(msg)
+        last_play = message.stabl_to_last_play(msg)
+
+        winner = self.detect_winner(psl, self.prev_player_stat_list)
+        asshole = False
+
+        # update gui
+        if self.gui:
+            self.gui.update(psl, self.prev_player_stat_list,
+                last_play, winner, asshole)
+        if winner:
+            if winner.name.strip() == self.player.name.strip():
+                # they went out
+                if self.gui:
+                    self.gui.print_msg("You went out!")
+            # see if the game is over
+            active_players = []
+            for player in psl:
+                if player.status in ('a', 'w', 'p') and player.num_cards > 0:
+                    active_players.append(player)
+            if len(active_players) <= 1:
+                # the game is over!
+                self.in_game = False
+                self.waiting_for_play = False
+                self.player.hand = []
+                self.player.status = 'l'
+                self.player_num = None
+                self.cleanup_wait_thread()
+                self.wait_thread = None
+                try:
+                    asshole = active_players[0]
+                except IndexError:
+                    asshole = None
+                self.prev_player_stat_list = None
+        if asshole:
+            return
+        if self.in_game:
+            # see if they missed their turn
+            if self.waiting_for_play and \
+                current_turn_num(psl) != self.my_turn_num(psl):
+                # their turn timed out
+                self.waiting_for_play = False
+                if not self.wait_thread.is_alive():
+                    self.wait_thread = None
+            # see if it's their turn
+            if current_turn_num(psl) == self.my_turn_num(psl):
+                if self.automated:
+                    play = self.auto_play(last_play)
+                    self.player.remove_from_hand(play)
+                    self.send_msg('[cplay|{}]'.format(message.cards_to_str(play, 4)))
+                else:
+                    self.waiting_for_play = True
+                    self.gui.print_msg("It's your turn!")
+                    self.asynch_get_play()
+        self.prev_player_stat_list = psl
+
     # Utility functions
     def my_turn_num(self, player_stat_list):
         """Looks through player list and determines what turn number client is
@@ -270,8 +331,10 @@ class Client():
                     'stabl missing this player'))
         return self.player_num
     
-
     def detect_winner(self, player_stat_list, prev_player_stat_list):
+        """See if anyone won between the two latest table status messages from
+        the server.
+        """
         if not prev_player_stat_list:
             return None
         for i, ps in enumerate(player_stat_list):
@@ -282,6 +345,7 @@ class Client():
             return None
 
     def asynch_get_play(self):
+        """Asynchronously get user play from GUI."""
         assert(self.gui)
         if self.wait_thread:
             self.wait_thread.join(0)
@@ -293,6 +357,7 @@ class Client():
         self.wait_thread.start()
     
     def get_play(self):
+        """Get user play from GUI."""
         assert(self.gui)
         while self.waiting_for_play or self.waiting_for_swap:
             try:
@@ -326,6 +391,7 @@ class Client():
         return
                     
     def cleanup_wait_thread(self):
+        """Check for zombie threads and clean them up."""
         if not self.wait_thread:
             return
         else:
@@ -333,69 +399,8 @@ class Client():
         if not self.wait_thread.is_alive():
             self.wait_thread = None
 
-    def process_stabl(self, msg):
-        logging.info('Client %s processing stabl: ' + msg, self.name)
-        psl = message.stabl_to_player_stat_list(msg)
-        last_play = message.stabl_to_last_play(msg)
-
-        winner = self.detect_winner(psl, self.prev_player_stat_list)
-        asshole = False
-
-        # update gui
-        if self.gui:
-            self.gui.update(psl, self.prev_player_stat_list,
-                last_play, winner, asshole)
-
-        if winner:
-            if winner.name.strip() == self.player.name.strip():
-                # they went out
-                if self.gui:
-                    self.gui.print_msg("You went out!")
-            # see if the game is over
-            active_players = []
-            for player in psl:
-                if player.status in ('a', 'w', 'p') and player.num_cards > 0:
-                    active_players.append(player)
-            if len(active_players) <= 1:
-                # the game is over!
-                self.in_game = False
-                self.waiting_for_play = False
-                self.player.hand = []
-                self.player.status = 'l'
-                self.player_num = None
-                self.cleanup_wait_thread()
-                self.wait_thread = None
-                try:
-                    asshole = active_players[0]
-                except IndexError:
-                    asshole = None
-                self.prev_player_stat_list = None
-
-        if asshole:
-            return
-
-        if self.in_game:
-            # see if they missed their turn
-            if self.waiting_for_play and \
-                current_turn_num(psl) != self.my_turn_num(psl):
-                # their turn timed out
-                self.waiting_for_play = False
-                if not self.wait_thread.is_alive():
-                    self.wait_thread = None
-            # see if it's their turn
-            if current_turn_num(psl) == self.my_turn_num(psl):
-                if self.automated:
-                    play = self.auto_play(last_play)
-                    self.player.remove_from_hand(play)
-                    self.send_msg('[cplay|{}]'.format(message.cards_to_str(play, 4)))
-                else:
-                    self.waiting_for_play = True
-                    self.gui.print_msg("It's your turn!")
-                    self.asynch_get_play()
-
-        self.prev_player_stat_list = psl
-
     def auto_play(self, last_play):
+        """When client is automated, figure out which cards to play."""
         time.sleep(AUTOPLAY_PAUSE)
         hand = self.player.hand
         hand.sort()
@@ -414,6 +419,7 @@ class Client():
             return []
 
     def disconnect(self):
+        """Disconnect socket from server."""
         try:
             self.sockobj.shutdown(socket.SHUT_RDWR)
         except OSError:
@@ -496,10 +502,10 @@ def main(argv):
         if client.gui:
             client.gui.curses_thread.join()
         logging.info("Client %s quitting", client.name)
-    except BaseException as ex:
+    except Exception as ex:
         logging.info('Client caught exception: %s', ex)
+        raise ex
     return
-
 
 if __name__ == '__main__':
     main(sys.argv[1:])

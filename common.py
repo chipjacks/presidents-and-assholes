@@ -1,6 +1,11 @@
+"""Deck, Player, and Table classes used by client and server to play Warlords
+and Scumbags card game.
+"""
+
 from random import shuffle
 import logging
 
+# Constants
 HOST = 'localhost'
 PORT = 36716
 TABLESIZE = 7
@@ -8,12 +13,12 @@ LOBBYSIZE = 35
 
 def setup_logging():
     FORMAT = '%(filename)s: %(message)s'
-    logging.basicConfig(level=logging.DEBUG, format=FORMAT, filename='log.log')
+    # To log to file, use filename='log.log' argument
+    logging.basicConfig(level=logging.DEBUG, format=FORMAT)
     logging.info('Logging started')
 
 class Deck:
-    """
-    A deck of cards, which can be shuffled and dealt.
+    """A deck of cards, which can be shuffled and dealt.
     """
     DECK_SIZE = 52
     
@@ -33,9 +38,9 @@ class Deck:
         return hands
 
 class Player:
+    """A player who has a hand of cards.
     """
-    A player who has a hand of cards and can play cards on table.
-    """
+
     def __init__(self, name):
         self.hand = []
         self.name = name
@@ -64,11 +69,14 @@ class Player:
         cards = set(cards)
         hand_set = set(self.hand)
         if (not cards <= hand_set):
-            raise PlayerError(self, "tried to remove cards they don't have from hand")
+            raise PlayerError(self,
+                "tried to remove cards they don't have from hand")
         for card in cards:
             self.hand.remove(card)
 
 class Table:
+    """A table that holds players and tracks gameplay.
+    """
     def __init__(self):
         self.players = []
         self.winners = []

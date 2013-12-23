@@ -1,3 +1,5 @@
+"""Text-based GUI displayed in terminal using Python curses module."""
+
 import message
 import client
 import curses
@@ -35,11 +37,13 @@ def main():
 
 class ClientGui():
 
-    card_index = '123456789abcdefghijklmnop'
-    players = []    # List of dictionaries: {name="chipjack", num_cards=7, status='a'}
-    
+    # indexes used to choose cards from hand in GUI
+    CARD_INDEX = '123456789abcdefghijklmnop'
+    # List of dictionaries: {name="chipjack", num_cards=7, status='a'}
+    players = []        
+
+    # Set-up
     def __init__(self, client):
-        # sys.stdout.write("\x1b[8;{rows};{cols}t\]".format(rows=SCRN_HEIGHT, cols=SCRN_WIDTH))
         self.client = client
         self.prev_last_play = []
         self.msgs = []
@@ -112,6 +116,7 @@ class ClientGui():
     def curses_wrapper(self):
         curses.wrapper(self.curses_loop)
 
+    # Main loop
     def curses_loop(self, stdscr):
         self.build_windows(stdscr)
         self.print_msg("If this GUI crashes, type 'reset' into your shell to get it back to normal")
@@ -148,9 +153,9 @@ class ClientGui():
                     self.print_cards(self.play)))
                 self.play = []
                 self.update_play()
-            if c not in self.card_index:
+            if c not in self.CARD_INDEX:
                 continue
-            i = self.card_index.index(c)
+            i = self.CARD_INDEX.index(c)
             if i < len(self.hand):
                 # take or put back card from hand
                 if self.hand[i] in self.play:
@@ -176,6 +181,7 @@ class ClientGui():
             # self.print_msg('Detected {}'.format(key))
             return key
 
+    # Update functions
     def update(self, player_stat_list, prev_player_stat_list, last_play,
         winner=None, asshole=False):
         self.lock.acquire()
@@ -326,10 +332,10 @@ class ClientGui():
         for i, card in enumerate(hand):
             if card // 4 == 7:
                 # it's a 10, we need more space after it for extra digit
-                hand_indexes += self.card_index[i]
+                hand_indexes += self.CARD_INDEX[i]
                 hand_indexes += '     ' 
             else:
-                hand_indexes += self.card_index[i]
+                hand_indexes += self.CARD_INDEX[i]
                 hand_indexes += '    '
         self.hand_win.addstr(3, 2, hand_indexes.ljust(HAND_WIDTH-3))
         self.hand_win.addstr(5, 2, self.print_cards(hand).ljust(HAND_WIDTH-3))
