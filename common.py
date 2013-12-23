@@ -11,10 +11,14 @@ PORT = 36716
 TABLESIZE = 7
 LOBBYSIZE = 35
 
-def setup_logging():
+def setup_logging(to_file=False):
     FORMAT = '%(filename)s: %(message)s'
     # To log to file, use filename='log.log' argument
-    logging.basicConfig(level=logging.DEBUG, format=FORMAT)
+    if to_file:
+        logging.basicConfig(level=logging.DEBUG, format=FORMAT,
+            filename='log.log')
+    else:
+        logging.basicConfig(level=logging.DEBUG, format=FORMAT)
     logging.info('Logging started')
 
 class Deck:

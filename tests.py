@@ -271,11 +271,11 @@ def test_game(host, num_bots=6, gui=True):
 
 
 if __name__ == '__main__':
-    common.setup_logging()
+    GUI = True
+    common.setup_logging(to_file=GUI)
     # unittest.main()   # Uncomment to unit-test utility functions
     h = '192.168.10.100'
     lh = 'localhost'
-    GUI = False
     if not GUI:
         # speed test
         print("Performing automated test to see if game crashes")
@@ -286,5 +286,5 @@ if __name__ == '__main__':
         time.sleep(.5)
         # gui test
         client.AUTOPLAY_PAUSE = .1
-        test_game(lh, 10, gui=GUI)
+        test_game(lh, 40, gui=GUI)
     logging.info('Logging finished')
